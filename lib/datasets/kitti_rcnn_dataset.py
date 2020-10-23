@@ -7,6 +7,7 @@ from lib.datasets.kitti_dataset import KittiDataset
 import lib.utils.kitti_utils as kitti_utils
 import lib.utils.roipool3d.roipool3d_utils as roipool3d_utils
 from lib.config import cfg
+from lib.utils import das_utils
 
 
 class KittiRCNNDataset(KittiDataset):
@@ -251,6 +252,12 @@ class KittiRCNNDataset(KittiDataset):
             img_shape = self.get_image_shape(sample_id)
             pts_lidar = self.get_lidar(sample_id)
 
+            # TODO: Apply a mask here
+            # EDIT THIS LINE TO CHANGE SAMPLE RATIO
+            masked_pts = pts_lidar[np.random.choice(pts_lidar.shape[0], int(pts_lidar.shape[0] * 1), replace=False), :]
+            pts_lidar = masked_pts
+            # print(masked_pts)
+
             # get valid point (projected points should be in image)
             pts_rect = calib.lidar_to_rect(pts_lidar[:, 0:3])
             pts_intensity = pts_lidar[:, 3]
@@ -296,7 +303,7 @@ class KittiRCNNDataset(KittiDataset):
             else:
                 choice = np.arange(0, len(pts_rect), dtype=np.int32)
                 if self.npoints > len(pts_rect):
-                    extra_choice = np.random.choice(choice, self.npoints - len(pts_rect), replace=False)
+                    extra_choice = np.random.choice(choice, min([self.npoints - len(pts_rect), len(pts_rect)]), replace=False)
                     choice = np.concatenate((choice, extra_choice), axis=0)
                 np.random.shuffle(choice)
 
@@ -325,6 +332,7 @@ class KittiRCNNDataset(KittiDataset):
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
             gt_obj_list.extend(extra_gt_obj_list)
         gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
+        print(das_utils.dist_to_box(gt_boxes3d, ret_pts_rect))
 
         gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
         for k, obj in enumerate(gt_obj_list):
