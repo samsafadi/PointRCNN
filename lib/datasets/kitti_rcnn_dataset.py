@@ -332,7 +332,7 @@ class KittiRCNNDataset(KittiDataset):
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
             gt_obj_list.extend(extra_gt_obj_list)
         gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
-        print(das_utils.dist_to_box(gt_boxes3d, ret_pts_rect))
+        print(das_utils.dist_to_box_centroid(gt_boxes3d, ret_pts_rect))
 
         gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
         for k, obj in enumerate(gt_obj_list):
