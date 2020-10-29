@@ -485,6 +485,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval')
     for data in dataloader:
         cnt += 1
+        #print(data['sample_id'], data['pts_input'].shape, data['pts_rect'].shape, data['pts_features'].shape)
         sample_id, pts_rect, pts_features, pts_input = \
             data['sample_id'], data['pts_rect'], data['pts_features'], data['pts_input']
         batch_size = len(sample_id)

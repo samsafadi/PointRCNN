@@ -252,12 +252,6 @@ class KittiRCNNDataset(KittiDataset):
             img_shape = self.get_image_shape(sample_id)
             pts_lidar = self.get_lidar(sample_id)
 
-            # TODO: Apply a mask here
-            # EDIT THIS LINE TO CHANGE SAMPLE RATIO
-            masked_pts = pts_lidar[np.random.choice(pts_lidar.shape[0], int(pts_lidar.shape[0] * 1), replace=False), :]
-            pts_lidar = masked_pts
-            # print(masked_pts)
-
             # get valid point (projected points should be in image)
             pts_rect = calib.lidar_to_rect(pts_lidar[:, 0:3])
             pts_intensity = pts_lidar[:, 3]
@@ -276,6 +270,31 @@ class KittiRCNNDataset(KittiDataset):
 
         pts_rect = pts_rect[pts_valid_flag][:, 0:3]
         pts_intensity = pts_intensity[pts_valid_flag]
+
+        # ADDITIONS HERE - bassam
+        # TODO: Apply a mask here
+
+        RATIO = 0.5
+
+        if self.mode == "EVAL":
+            all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
+            all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
+
+            num_points = pts_rect.shape[0]
+            # Calculates the distance from each point to the centroid of each box
+            dists = das_utils.dist_to_boxes(pts_rect[:, :3], all_gt_boxes3d)
+            # minimum distance to a centroid for all points
+            min_dists = torch.min(dists, 0)
+            smallest_k_indices = torch.topk(min_dists[0], int(RATIO * num_points), largest=False)[1]
+
+            masked_lidar = []
+            masked_intensity = []
+            for idx in smallest_k_indices:
+                masked_lidar.append(pts_rect[idx])
+                masked_intensity.append(pts_intensity[idx])
+
+            pts_rect = np.array(masked_lidar)
+            pts_intensity = np.array(masked_intensity)
 
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN':
             # all labels for checking overlapping
@@ -302,9 +321,12 @@ class KittiRCNNDataset(KittiDataset):
                 np.random.shuffle(choice)
             else:
                 choice = np.arange(0, len(pts_rect), dtype=np.int32)
+
+                # MADE CHANGES HERE - bassam
                 if self.npoints > len(pts_rect):
-                    extra_choice = np.random.choice(choice, min([self.npoints - len(pts_rect), len(pts_rect)]), replace=False)
-                    choice = np.concatenate((choice, extra_choice), axis=0)
+                    while len(choice) < self.npoints:
+                        extra_choice = np.random.choice(choice, min([self.npoints - len(pts_rect), len(pts_rect)]), replace=False)
+                        choice = np.concatenate((choice, extra_choice), axis=0)
                 np.random.shuffle(choice)
 
             ret_pts_rect = pts_rect[choice, :]
@@ -332,7 +354,6 @@ class KittiRCNNDataset(KittiDataset):
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
             gt_obj_list.extend(extra_gt_obj_list)
         gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
-        print(das_utils.dist_to_box_centroid(gt_boxes3d, ret_pts_rect))
 
         gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
         for k, obj in enumerate(gt_obj_list):
