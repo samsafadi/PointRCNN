@@ -48,7 +48,7 @@ def random_sample(pts_rect, pts_intensity, ratio):
     return pts_rect, pts_intensity
 
 
-def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d):
+def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d, ratio):
     """
     Samples points from pts_rect and pts_intensity based on the entropy gained
     as shown in roi_scores and roi_boxes3d
