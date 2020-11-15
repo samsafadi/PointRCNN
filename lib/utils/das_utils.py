@@ -81,3 +81,16 @@ def pt_info_to_input(pts_rect, pts_intensity, npoints, use_pts_intensity):
         pts_input = ret_pts_rect
 
     return pts_input, ret_pts_rect, ret_pts_features
+
+
+def confidence_to_entropy(confidence_scores):
+    """
+    :param confidence_scores: (M)
+    :return: entropy_scores: (M)
+    """
+    if type(confidence_scores) == np.ndarray:
+        return -confidence_scores * np.log2(confidence_scores) - (1 - confidence_scores) * np.log2(1 - confidence_scores)
+    elif type(confidence_scores) == torch.Tensor:
+        return -confidence_scores * torch.log2(confidence_scores) - (1 - confidence_scores) * torch.log2(1 - confidence_scores)
+    else:
+        raise NotImplementedError

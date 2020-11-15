@@ -488,21 +488,23 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
 
     for data in dataloader:
         # Set as 1 for now for testing purposes, but will be 2 passes
-        for i in range(1):
-            cnt += 1
+        cnt += 1
+        roi_scores_raw = None
+        roi_boxes3d = None
 
+        for i in range(2):
+            # POLICY HERE - bassam (first pass use random sample, second use roi_based_sample)
             sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
                 data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
 
             pts_rect = np.squeeze(pts_rect, axis=0)
             pts_intensity = np.squeeze(pts_intensity, axis=0)
-
-            # POLICY HERE - bassam (first pass use random sample, second use roi_based_sample)
             if i == 0:
-                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.25)
+                # EDIT LAST VARIABLE FOR RATIO
+                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.5)
             else:
-                # TODO: create roi-based policy
-                pass
+                # create roi-based policy (EDIT LAST VARIABLE FOR RATIO)
+                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.5)
 
             pts_input, pts_rect, pts_features = das_utils.pt_info_to_input(pts_rect, pts_intensity, npoints, cfg.RPN.USE_INTENSITY)
 
