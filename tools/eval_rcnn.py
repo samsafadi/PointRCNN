@@ -491,6 +491,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
         cnt += 1
         roi_scores_raw = None
         roi_boxes3d = None
+        prev_pts_rect, prev_pts_intensity = None, None
 
         for i in range(2):
             # POLICY HERE - bassam (first pass use random sample, second use roi_based_sample)
@@ -499,12 +500,18 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
 
             pts_rect = np.squeeze(pts_rect, axis=0)
             pts_intensity = np.squeeze(pts_intensity, axis=0)
+
+            # Total ratio is the sum of first pass ratio and second pass ratio
             if i == 0:
                 # EDIT LAST VARIABLE FOR RATIO
-                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.5)
+                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.25)
+                # print("pass 1: ", pts_rect.shape)
             else:
                 # create roi-based policy (EDIT LAST VARIABLE FOR RATIO)
-                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.5)
+                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.25)
+                # print("pass 2: ", pts_rect.shape)
+
+            prev_pts_rect, prev_pts_intensity = pts_rect, pts_intensity
 
             pts_input, pts_rect, pts_features = das_utils.pt_info_to_input(pts_rect, pts_intensity, npoints, cfg.RPN.USE_INTENSITY)
 

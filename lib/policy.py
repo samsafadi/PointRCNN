@@ -49,12 +49,14 @@ def random_sample(pts_rect, pts_intensity, ratio):
     return pts_rect, pts_intensity
 
 
-def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d, ratio):
+def roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity, roi_scores, roi_boxes3d, ratio):
     """
     Samples points from pts_rect and pts_intensity based on the entropy gained
-    as shown in roi_scores and roi_boxes3d
+    as shown in roi_scores and roi_boxes3d. Uses points found in last pass and adds to them
     :param pts_rect: (N, 3)
     :param pts_intensity: (N, 1)
+    :param prev_pts_rect: (N, 3)
+    :param prev_pts_intensity: (N, 1)
     :param roi_scores: (M)
     :param roi_boxes3d: (M, 7)
     :return: pts_rect, pts_intensity
@@ -63,21 +65,33 @@ def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d, ratio):
     roi_scores = roi_scores.cpu()
     roi_boxes3d = roi_boxes3d.cpu()
 
-    # points in each roi, tie-broken based on confidence
+    pts_and_intensity = np.append(pts_rect, pts_intensity, axis=1)
+    prev_pts_and_intensity = np.append(prev_pts_rect, prev_pts_intensity, axis=1)
+
+    # Sets of tuples of points to calculate diff
+    prev_pts_set = set(map(tuple, prev_pts_and_intensity))
+    pts_set = set(map(tuple, pts_and_intensity))
+
+    # Get pts not in previous pass
+    pts_diff_set = pts_set - prev_pts_set
+    pts_diff = np.array(list(pts_diff_set))
+
+    # pts and intensity diff
+    pts_rect_diff = pts_diff[:, :3]
+
     seen = set()
     point_sets = list(range(len(roi_scores)))
     confidence = (1 / (1 + np.exp(-roi_scores.numpy())))
     entropy = das_utils.confidence_to_entropy(confidence)
     normalized_entropy_distribution = (1 / sum(entropy)) * entropy
 
-    pts_and_intensity = np.append(pts_rect, pts_intensity, axis=1)
-
     highest_to_lowest_entropy = sorted(range(len(entropy)), key=entropy.__getitem__, reverse=True)
 
     # Points in boxes in order of decreasing entropy to prevent duplicates
     for i in highest_to_lowest_entropy:
-        pts_in_box_mask = pts_in_boxes3d_cpu(torch.Tensor(pts_rect), roi_boxes3d[i].unsqueeze(0))[0]
-        pts_in_box = pts_and_intensity[pts_in_box_mask]
+        # Add new sampled points to set
+        pts_in_box_mask = pts_in_boxes3d_cpu(torch.Tensor(pts_rect_diff), roi_boxes3d[i].unsqueeze(0))[0]
+        pts_in_box = pts_diff[pts_in_box_mask]
         for pt in pts_in_box:
             if tuple(pt) in seen:
                 np.delete(pts_in_box, np.argwhere(pts_in_box == pt))
@@ -86,19 +100,23 @@ def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d, ratio):
 
         point_sets[i] = pts_in_box
 
+    # Sampled points (add prev points)
+    sampled_points = prev_pts_and_intensity
+
     # Fill with random points if less points than desired
     if (len(pts_rect) * ratio > sum([len(point_sets[i]) for i in range(len(point_sets))])):
-        sampled_points = pts_and_intensity[pts_in_boxes3d_cpu(torch.Tensor(pts_rect), roi_boxes3d)[0]]
+        new_sampled_points = pts_and_intensity[pts_in_boxes3d_cpu(torch.Tensor(pts_rect), roi_boxes3d)[0]]
         shuffled_pts = np.random.permutation(pts_and_intensity)
         i = 0
-        j = int(len(pts_rect) * ratio) - len(sampled_points)
+        j = int(len(pts_rect) * ratio) - len(new_sampled_points)
         while i < j:
             if tuple(shuffled_pts[i]) in seen:
                 j += 1
             else:
-                sampled_points = np.concatenate((sampled_points, shuffled_pts[i].reshape(1, 4)), axis=0)
+                new_sampled_points = np.concatenate((new_sampled_points, shuffled_pts[i].reshape(1, 4)), axis=0)
             i += 1
 
+        sampled_points = np.concatenate((sampled_points, new_sampled_points), axis=0)
         return np.array(sampled_points)[:, :3], np.array(sampled_points)[:, 3]
 
     # Sampling stage
@@ -111,7 +129,9 @@ def roi_based_sample(pts_rect, pts_intensity, roi_scores, roi_boxes3d, ratio):
 
     sampled_indices_indices = np.random.choice(range(len(indices)), size=int(ratio * len(pts_rect)), p=probs, replace=False)
     sampled_indices = indices[sampled_indices_indices]
-    sampled_points = [point_sets[idx[0]][idx[1]] for idx in sampled_indices]
+    new_sampled_points = [point_sets[idx[0]][idx[1]] for idx in sampled_indices]
+
+    sampled_points = np.concatenate((sampled_points, new_sampled_points), axis=0)
 
     # print(sampled_points)
     return np.array(sampled_points)[:, :3], np.array(sampled_points)[:, 3]
