@@ -103,6 +103,7 @@ int pts_in_boxes3d_cpu(at::Tensor pts_flag, at::Tensor pts, at::Tensor boxes3d){
     CHECK_CONTIGUOUS(pts);
     CHECK_CONTIGUOUS(boxes3d);
 
+
     long boxes_num = boxes3d.size(0);
     long pts_num = pts.size(0);
 

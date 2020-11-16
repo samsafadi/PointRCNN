@@ -6,6 +6,7 @@ import torch
 from lib.datasets.kitti_dataset import KittiDataset
 import lib.utils.kitti_utils as kitti_utils
 import lib.utils.roipool3d.roipool3d_utils as roipool3d_utils
+import lib.policy as policy
 from lib.config import cfg
 from lib.utils import das_utils
 
@@ -271,123 +272,131 @@ class KittiRCNNDataset(KittiDataset):
         pts_rect = pts_rect[pts_valid_flag][:, 0:3]
         pts_intensity = pts_intensity[pts_valid_flag]
 
-        # ADDITIONS HERE - bassam
-        # TODO: Apply a mask here
+        # if self.mode == "EVAL":
+        #     all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
+        #     all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
 
-        RATIO = 0.5
+        #     num_points = pts_rect.shape[0]
+        #     # Calculates the distance from each point to the centroid of each box
+        #     dists = das_utils.dist_to_boxes(pts_rect[:, :3], all_gt_boxes3d)
+        #     # minimum distance to a centroid for all points
+        #     min_dists = torch.min(dists, 0)
+        #     smallest_k_indices = torch.topk(min_dists[0], int(RATIO * num_points), largest=False)[1]
 
-        if self.mode == "EVAL":
-            all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
-            all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
+        #     masked_lidar = []
+        #     masked_intensity = []
+        #     for idx in smallest_k_indices:
+        #         masked_lidar.append(pts_rect[idx])
+        #         masked_intensity.append(pts_intensity[idx])
 
-            num_points = pts_rect.shape[0]
-            # Calculates the distance from each point to the centroid of each box
-            dists = das_utils.dist_to_boxes(pts_rect[:, :3], all_gt_boxes3d)
-            # minimum distance to a centroid for all points
-            min_dists = torch.min(dists, 0)
-            smallest_k_indices = torch.topk(min_dists[0], int(RATIO * num_points), largest=False)[1]
+        #     pts_rect = np.array(masked_lidar)
+        #     pts_intensity = np.array(masked_intensity)
 
-            masked_lidar = []
-            masked_intensity = []
-            for idx in smallest_k_indices:
-                masked_lidar.append(pts_rect[idx])
-                masked_intensity.append(pts_intensity[idx])
+        #     use policy file
+        #     pts_rect, pts_intensity = policy.distance_from_gt_policy(pts_rect, pts_intensity, all_gt_boxes3d, RATIO)
 
-            pts_rect = np.array(masked_lidar)
-            pts_intensity = np.array(masked_intensity)
+        # if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN':
+        #     # all labels for checking overlapping
+        #     all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
+        #     all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
 
-        if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN':
-            # all labels for checking overlapping
-            all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
-            all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
-
-            gt_aug_flag = False
-            if np.random.rand() < cfg.GT_AUG_APPLY_PROB:
-                # augment one scene
-                gt_aug_flag, pts_rect, pts_intensity, extra_gt_boxes3d, extra_gt_obj_list = \
-                    self.apply_gt_aug_to_one_scene(sample_id, pts_rect, pts_intensity, all_gt_boxes3d)
+        #     gt_aug_flag = False
+        #     if np.random.rand() < cfg.GT_AUG_APPLY_PROB:
+        #         # augment one scene
+        #         gt_aug_flag, pts_rect, pts_intensity, extra_gt_boxes3d, extra_gt_obj_list = \
+        #             self.apply_gt_aug_to_one_scene(sample_id, pts_rect, pts_intensity, all_gt_boxes3d)
 
         # generate inputs
-        if self.mode == 'TRAIN' or self.random_select:
-            if self.npoints < len(pts_rect):
-                pts_depth = pts_rect[:, 2]
-                pts_near_flag = pts_depth < 40.0
-                far_idxs_choice = np.where(pts_near_flag == 0)[0]
-                near_idxs = np.where(pts_near_flag == 1)[0]
-                near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
+        # if self.mode == 'TRAIN' or self.random_select:
+        #     if self.npoints < len(pts_rect):
+        #         pts_depth = pts_rect[:, 2]
+        #         pts_near_flag = pts_depth < 40.0
+        #         far_idxs_choice = np.where(pts_near_flag == 0)[0]
+        #         near_idxs = np.where(pts_near_flag == 1)[0]
+        #         near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
 
-                choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
-                    if len(far_idxs_choice) > 0 else near_idxs_choice
-                np.random.shuffle(choice)
-            else:
-                choice = np.arange(0, len(pts_rect), dtype=np.int32)
+        #         choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
+        #             if len(far_idxs_choice) > 0 else near_idxs_choice
+        #         np.random.shuffle(choice)
+        #     else:
+        #         choice = np.arange(0, len(pts_rect), dtype=np.int32)
 
-                # MADE CHANGES HERE - bassam
-                if self.npoints > len(pts_rect):
-                    while len(choice) < self.npoints:
-                        extra_choice = np.random.choice(choice, min([self.npoints - len(pts_rect), len(pts_rect)]), replace=False)
-                        choice = np.concatenate((choice, extra_choice), axis=0)
-                np.random.shuffle(choice)
+        #         # MADE CHANGES HERE - bassam
+        #         if self.npoints > len(pts_rect):
+        #             while len(choice) < self.npoints:
+        #                 extra_choice = np.random.choice(choice, min([self.npoints - len(pts_rect), len(pts_rect)]), replace=False)
+        #                 choice = np.concatenate((choice, extra_choice), axis=0)
+        #         np.random.shuffle(choice)
 
-            ret_pts_rect = pts_rect[choice, :]
-            ret_pts_intensity = pts_intensity[choice] - 0.5  # translate intensity to [-0.5, 0.5]
-        else:
-            ret_pts_rect = pts_rect
-            ret_pts_intensity = pts_intensity - 0.5
+        #     ret_pts_rect = pts_rect[choice, :]
+        #     ret_pts_intensity = pts_intensity[choice] - 0.5  # translate intensity to [-0.5, 0.5]
+        # else:
+        #     ret_pts_rect = pts_rect
+        #     ret_pts_intensity = pts_intensity - 0.5
 
-        pts_features = [ret_pts_intensity.reshape(-1, 1)]
-        ret_pts_features = np.concatenate(pts_features, axis=1) if pts_features.__len__() > 1 else pts_features[0]
+        # pts_features = [ret_pts_intensity.reshape(-1, 1)]
+        # ret_pts_features = np.concatenate(pts_features, axis=1) if pts_features.__len__() > 1 else pts_features[0]
 
-        sample_info = {'sample_id': sample_id, 'random_select': self.random_select}
+        # sample_info = {'sample_id': sample_id, 'random_select': self.random_select}
 
-        if self.mode == 'TEST':
-            if cfg.RPN.USE_INTENSITY:
-                pts_input = np.concatenate((ret_pts_rect, ret_pts_features), axis=1)  # (N, C)
-            else:
-                pts_input = ret_pts_rect
-            sample_info['pts_input'] = pts_input
-            sample_info['pts_rect'] = ret_pts_rect
-            sample_info['pts_features'] = ret_pts_features
-            return sample_info
+        # if self.mode == 'TEST':
+        #     if cfg.RPN.USE_INTENSITY:
+        #         pts_input = np.concatenate((ret_pts_rect, ret_pts_features), axis=1)  # (N, C)
+        #     else:
+        #         pts_input = ret_pts_rect
+        #     sample_info['pts_input'] = pts_input
+        #     sample_info['pts_rect'] = ret_pts_rect
+        #     sample_info['pts_features'] = ret_pts_features
+        #     return sample_info
 
-        gt_obj_list = self.filtrate_objects(self.get_label(sample_id))
-        if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
-            gt_obj_list.extend(extra_gt_obj_list)
-        gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
+        # gt_obj_list = self.filtrate_objects(self.get_label(sample_id))
+        # if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
+        #     gt_obj_list.extend(extra_gt_obj_list)
+        # gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
 
-        gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
-        for k, obj in enumerate(gt_obj_list):
-            gt_alpha[k] = obj.alpha
+        # gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
+        # for k, obj in enumerate(gt_obj_list):
+        #     gt_alpha[k] = obj.alpha
 
-        # data augmentation
-        aug_pts_rect = ret_pts_rect.copy()
-        aug_gt_boxes3d = gt_boxes3d.copy()
-        if cfg.AUG_DATA and self.mode == 'TRAIN':
-            aug_pts_rect, aug_gt_boxes3d, aug_method = self.data_augmentation(aug_pts_rect, aug_gt_boxes3d, gt_alpha,
-                                                                              sample_id)
-            sample_info['aug_method'] = aug_method
+        # # data augmentation
+        # aug_pts_rect = ret_pts_rect.copy()
+        # aug_gt_boxes3d = gt_boxes3d.copy()
+        # if cfg.AUG_DATA and self.mode == 'TRAIN':
+        #     aug_pts_rect, aug_gt_boxes3d, aug_method = self.data_augmentation(aug_pts_rect, aug_gt_boxes3d, gt_alpha,
+        #                                                                       sample_id)
+        #     sample_info['aug_method'] = aug_method
 
-        # prepare input
-        if cfg.RPN.USE_INTENSITY:
-            pts_input = np.concatenate((aug_pts_rect, ret_pts_features), axis=1)  # (N, C)
-        else:
-            pts_input = aug_pts_rect
+        # # prepare input
+        # if cfg.RPN.USE_INTENSITY:
+        #     pts_input = np.concatenate((aug_pts_rect, ret_pts_features), axis=1)  # (N, C)
+        # else:
+        #     pts_input = aug_pts_rect
 
-        if cfg.RPN.FIXED:
-            sample_info['pts_input'] = pts_input
-            sample_info['pts_rect'] = aug_pts_rect
-            sample_info['pts_features'] = ret_pts_features
-            sample_info['gt_boxes3d'] = aug_gt_boxes3d
-            return sample_info
+        # if cfg.RPN.FIXED:
+        #     sample_info['pts_input'] = pts_input
+        #     sample_info['pts_rect'] = aug_pts_rect
+        #     sample_info['pts_features'] = ret_pts_features
+        #     sample_info['gt_boxes3d'] = aug_gt_boxes3d
+        #     return sample_info
 
-        # generate training labels
-        rpn_cls_label, rpn_reg_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
-        sample_info['pts_input'] = pts_input
-        sample_info['pts_rect'] = aug_pts_rect
-        sample_info['pts_features'] = ret_pts_features
-        sample_info['rpn_cls_label'] = rpn_cls_label
-        sample_info['rpn_reg_label'] = rpn_reg_label
-        sample_info['gt_boxes3d'] = aug_gt_boxes3d
+        # # generate training labels
+        # rpn_cls_label, rpn_reg_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
+        # sample_info['pts_input'] = pts_input
+        # sample_info['pts_rect'] = aug_pts_rect
+        # sample_info['pts_features'] = ret_pts_features
+        # sample_info['rpn_cls_label'] = rpn_cls_label
+        # sample_info['rpn_reg_label'] = rpn_reg_label
+        # sample_info['gt_boxes3d'] = aug_gt_boxes3d
+        # return sample_info
+
+        all_gt_obj_list = self.filtrate_dc_objects(self.get_label(sample_id))
+        all_gt_boxes3d = kitti_utils.objs_to_boxes3d(all_gt_obj_list)
+
+        pts_intensity = pts_intensity.reshape(len(pts_intensity), 1)
+
+        sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
+                        'pts_rect': pts_rect, 'pts_intensity': pts_intensity,
+                        'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints}
         return sample_info
 
     @staticmethod

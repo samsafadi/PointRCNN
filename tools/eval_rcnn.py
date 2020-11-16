@@ -8,7 +8,9 @@ from lib.net.point_rcnn import PointRCNN
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 import tools.train_utils.train_utils as train_utils
 from lib.utils.bbox_transform import decode_bbox_target
+from lib import policy
 from tools.kitti_object_eval_python.evaluate import evaluate as kitti_evaluate
+from lib.utils import das_utils
 
 from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
 import argparse
@@ -483,21 +485,40 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     cnt = final_total = total_cls_acc = total_cls_acc_refined = total_rpn_iou = 0
 
     progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval')
+
     for data in dataloader:
+        # Set as 1 for now for testing purposes, but will be 2 passes
         cnt += 1
-        #print(data['sample_id'], data['pts_input'].shape, data['pts_rect'].shape, data['pts_features'].shape)
-        sample_id, pts_rect, pts_features, pts_input = \
-            data['sample_id'], data['pts_rect'], data['pts_features'], data['pts_input']
-        batch_size = len(sample_id)
-        inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
-        input_data = {'pts_input': inputs}
+        roi_scores_raw = None
+        roi_boxes3d = None
 
-        # model inference
-        ret_dict = model(input_data)
+        for i in range(2):
+            # POLICY HERE - bassam (first pass use random sample, second use roi_based_sample)
+            sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
+                data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
 
-        roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
-        roi_boxes3d = ret_dict['rois']  # (B, M, 7)
-        seg_result = ret_dict['seg_result'].long()  # (B, N)
+            pts_rect = np.squeeze(pts_rect, axis=0)
+            pts_intensity = np.squeeze(pts_intensity, axis=0)
+            if i == 0:
+                # EDIT LAST VARIABLE FOR RATIO
+                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.5)
+            else:
+                # create roi-based policy (EDIT LAST VARIABLE FOR RATIO)
+                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.5)
+
+            pts_input, pts_rect, pts_features = das_utils.pt_info_to_input(pts_rect, pts_intensity, npoints, cfg.RPN.USE_INTENSITY)
+
+            batch_size = len(sample_id)
+            inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
+            input_data = {'pts_input': inputs}
+
+            # model inference
+            ret_dict = model(input_data)
+
+            # roi scores and boxes - feed back into second part of policy
+            roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
+            roi_boxes3d = ret_dict['rois']  # (B, M, 7)
+            seg_result = ret_dict['seg_result'].long()  # (B, N)
 
         rcnn_cls = ret_dict['rcnn_cls'].view(batch_size, -1, ret_dict['rcnn_cls'].shape[1])
         rcnn_reg = ret_dict['rcnn_reg'].view(batch_size, -1, ret_dict['rcnn_reg'].shape[1])  # (B, M, C)
