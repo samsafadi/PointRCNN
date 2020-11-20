@@ -496,6 +496,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             # POLICY HERE - bassam (first pass use random sample, second use roi_based_sample)
             sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
                 data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
+            # print('before sample the {} th time with {}points'.format(i,pts_rect.shape))
 
             pts_rect = np.squeeze(pts_rect, axis=0)
             pts_intensity = np.squeeze(pts_intensity, axis=0)
@@ -505,6 +506,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             else:
                 # create roi-based policy (EDIT LAST VARIABLE FOR RATIO)
                 pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.5)
+            # print('the {} th time with {}points'.format(i,pts_rect.shape))
 
             pts_input, pts_rect, pts_features = das_utils.pt_info_to_input(pts_rect, pts_intensity, npoints, cfg.RPN.USE_INTENSITY)
 
@@ -519,7 +521,6 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
             roi_boxes3d = ret_dict['rois']  # (B, M, 7)
             seg_result = ret_dict['seg_result'].long()  # (B, N)
-
         rcnn_cls = ret_dict['rcnn_cls'].view(batch_size, -1, ret_dict['rcnn_cls'].shape[1])
         rcnn_reg = ret_dict['rcnn_reg'].view(batch_size, -1, ret_dict['rcnn_reg'].shape[1])  # (B, M, C)
 
