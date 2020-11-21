@@ -487,7 +487,6 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval')
 
     for data in dataloader:
-        # Set as 1 for now for testing purposes, but will be 2 passes
         cnt += 1
         roi_scores_raw = None
         roi_boxes3d = None
@@ -504,11 +503,13 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             # Total ratio is the sum of first pass ratio and second pass ratio
             if i == 0:
                 # EDIT LAST VARIABLE FOR RATIO
-                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.25)
+                pts_rect, pts_intensity = policy.random_sample(pts_rect, pts_intensity, 0.4)
                 # print("pass 1: ", pts_rect.shape)
             else:
                 # create roi-based policy (EDIT LAST VARIABLE FOR RATIO)
-                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity, roi_scores_raw.squeeze(), roi_boxes3d.squeeze(), 0.25)
+                pts_rect, pts_intensity = policy.roi_based_sample(pts_rect, pts_intensity, prev_pts_rect,
+                                                                  prev_pts_intensity, roi_scores_raw.squeeze(),
+                                                                  roi_boxes3d.squeeze(), ratio=0.1, threshold=0.80)
                 # print("pass 2: ", pts_rect.shape)
 
             prev_pts_rect, prev_pts_intensity = pts_rect, pts_intensity

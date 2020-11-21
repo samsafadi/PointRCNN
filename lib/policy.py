@@ -49,7 +49,7 @@ def random_sample(pts_rect, pts_intensity, ratio):
     return pts_rect, pts_intensity
 
 
-def roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity, roi_scores, roi_boxes3d, ratio):
+def roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity, roi_scores, roi_boxes3d, ratio, threshold):
     """
     Samples points from pts_rect and pts_intensity based on the entropy gained
     as shown in roi_scores and roi_boxes3d. Uses points found in last pass and adds to them
@@ -59,6 +59,8 @@ def roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity,
     :param prev_pts_intensity: (N, 1)
     :param roi_scores: (M)
     :param roi_boxes3d: (M, 7)
+    :param ratio: ratio of total pts_rect to return
+    :param threshold: rois below this threshold will not be observed
     :return: pts_rect, pts_intensity
     """
     # send everything to cpu
@@ -79,12 +81,24 @@ def roi_based_sample(pts_rect, pts_intensity, prev_pts_rect, prev_pts_intensity,
     # pts and intensity diff
     pts_rect_diff = pts_diff[:, :3]
 
-    seen = set()
-    point_sets = list(range(len(roi_scores)))
+    # get entropy
     confidence = (1 / (1 + np.exp(-roi_scores.numpy())))
     entropy = das_utils.confidence_to_entropy(confidence)
+
+    # preen elements below threshold
+    threshold_mask = entropy > threshold
+    entropy = entropy[threshold_mask]
+    roi_scores = roi_scores[threshold_mask]
+    roi_boxes3d = roi_boxes3d[threshold_mask]
+
+    # print(len(entropy), len(roi_scores), len(roi_boxes3d))
+
     normalized_entropy_distribution = (1 / sum(entropy)) * entropy
 
+    seen = set()
+    point_sets = list(range(len(roi_scores)))
+
+    # Changed to False reverse temporarily to see the difference
     highest_to_lowest_entropy = sorted(range(len(entropy)), key=entropy.__getitem__, reverse=True)
 
     # Points in boxes in order of decreasing entropy to prevent duplicates
