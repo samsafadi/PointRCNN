@@ -45,7 +45,8 @@ class Calibration(object):
         :param pts: (N, 3 or 2)
         :return pts_hom: (N, 4 or 3)
         """
-        pts_hom = np.hstack((pts, np.ones((pts.shape[0], 1), dtype=np.float32)))
+        pts_hom = np.hstack(
+            (pts, np.ones((pts.shape[0], 1), dtype=np.float32)))
         return pts_hom
 
     def lidar_to_rect(self, pts_lidar):
@@ -66,7 +67,8 @@ class Calibration(object):
         pts_rect_hom = self.cart_to_hom(pts_rect)
         pts_2d_hom = np.dot(pts_rect_hom, self.P2.T)
         pts_img = (pts_2d_hom[:, 0:2].T / pts_rect_hom[:, 2]).T  # (N, 2)
-        pts_rect_depth = pts_2d_hom[:, 2] - self.P2.T[3, 2]  # depth in rect camera coord
+        pts_rect_depth = pts_2d_hom[:, 2] - \
+            self.P2.T[3, 2]  # depth in rect camera coord
         return pts_img, pts_rect_depth
 
     def lidar_to_img(self, pts_lidar):
@@ -87,7 +89,8 @@ class Calibration(object):
         """
         x = ((u - self.cu) * depth_rect) / self.fu + self.tx
         y = ((v - self.cv) * depth_rect) / self.fv + self.ty
-        pts_rect = np.concatenate((x.reshape(-1, 1), y.reshape(-1, 1), depth_rect.reshape(-1, 1)), axis=1)
+        pts_rect = np.concatenate(
+            (x.reshape(-1, 1), y.reshape(-1, 1), depth_rect.reshape(-1, 1)), axis=1)
         return pts_rect
 
     def depthmap_to_rect(self, depth_map):
@@ -110,16 +113,20 @@ class Calibration(object):
         :return: boxes_corner: (None, 8) [xi, yi] in rgb coordinate
         """
         sample_num = corners3d.shape[0]
-        corners3d_hom = np.concatenate((corners3d, np.ones((sample_num, 8, 1))), axis=2)  # (N, 8, 4)
+        corners3d_hom = np.concatenate(
+            (corners3d, np.ones((sample_num, 8, 1))), axis=2)  # (N, 8, 4)
 
         img_pts = np.matmul(corners3d_hom, self.P2.T)  # (N, 8, 3)
 
-        x, y = img_pts[:, :, 0] / img_pts[:, :, 2], img_pts[:, :, 1] / img_pts[:, :, 2]
+        x, y = img_pts[:, :, 0] / img_pts[:, :,
+                                          2], img_pts[:, :, 1] / img_pts[:, :, 2]
         x1, y1 = np.min(x, axis=1), np.min(y, axis=1)
         x2, y2 = np.max(x, axis=1), np.max(y, axis=1)
 
-        boxes = np.concatenate((x1.reshape(-1, 1), y1.reshape(-1, 1), x2.reshape(-1, 1), y2.reshape(-1, 1)), axis=1)
-        boxes_corner = np.concatenate((x.reshape(-1, 8, 1), y.reshape(-1, 8, 1)), axis=2)
+        boxes = np.concatenate(
+            (x1.reshape(-1, 1), y1.reshape(-1, 1), x2.reshape(-1, 1), y2.reshape(-1, 1)), axis=1)
+        boxes_corner = np.concatenate(
+            (x.reshape(-1, 8, 1), y.reshape(-1, 8, 1)), axis=2)
 
         return boxes, boxes_corner
 
@@ -136,5 +143,6 @@ class Calibration(object):
         x = ((u - self.cu) * d) / fd + self.tx
         y = ((v - self.cv) * d) / fd + self.ty
         z = np.sqrt(d**2 - x**2 - y**2)
-        pts_rect = np.concatenate((x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)), axis=1)
+        pts_rect = np.concatenate(
+            (x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)), axis=1)
         return pts_rect
