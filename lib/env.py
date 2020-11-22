@@ -14,7 +14,7 @@ class PointRCNNEnv(object):
         """
         pass
 
-    def step(self, action):
+    def step(self, action, obs=None):
         """step [Input the sampled map, output ]
         """
         return obs, rew, done, info 

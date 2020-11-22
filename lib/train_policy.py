@@ -1,5 +1,5 @@
 
-""" [summary]
+""" [train the policy. For now we actually only train the policy gradient]
 """
 
 import torch
@@ -35,9 +35,10 @@ def train(agent, env, config, device, debug, replay_buffer=None):
             batch_acts.append(act)
             ep_rews.append(rew)
         else:
-            replay_buffer.push(s0.view(-1), a0.view(-1), reward.view(-1), s1.view(-1), done.view(-1))
+            # replay_buffer.push(s0.view(-1), a0.view(-1), reward.view(-1), s1.view(-1), done.view(-1))
+            pass 
         
-        # actually this always true in our current setting
+        # actually done is always true in our current setting
         if done:
             s0 = env.reset()
 
@@ -54,8 +55,6 @@ def load_config(config_path):
 
 
 if __name__ == "__main__":
-
-    config_path = None
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print('Running on GPU {}'.format(torch.cuda.get_device_name(0)))
@@ -63,6 +62,7 @@ if __name__ == "__main__":
         args.device = torch.device('cpu')
         print('Running on CPU')
 
+    config_path = '/config/sac.json'
     config = load_config(config_path)
     debug = True
 

@@ -20,8 +20,7 @@ class PG(object):
         self.configs = configs
         self.env = env
         self.actor = UNet()
-        # make optimizer
-        self.optimizer = Adam(actor.parameters(), lr=configs['lr'])
+        self.optimizer = Adam(self.actor.parameters(), lr=configs['lr'])
 
 
     def get_action(self, state, deterministic=False):
@@ -54,15 +53,14 @@ class PG(object):
 
     def compute_loss(self, obs, act, rew):
         """make loss function whose gradient, for the right data, is policy gradient"""
-        logp = self.get_action(obs).log_prob(act)
-        act_baseline = self.get_action(obs, deterministic=True)
-        _, rew_baseline, _, _ = self.env.step(obs, act_baseline)
+        
+        # TODO we may do not need to calculate it for twice times. 
+        _, _, logp, _ = self.get_action(obs, deterministic=True)
 
+        _, rew_baseline, _, _ = self.env.step(act_baseline, obs=obs)
         advantage = rew.to(device).float() - rew_baseline.to(device).float()
 
-        loss = loss * Variable(advantage).expand_as(act)
-        
-
+        loss = logp * Variable(advantage).expand_as(act)
 
         return loss
 
