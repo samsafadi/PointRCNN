@@ -34,7 +34,7 @@ class PointRCNNEnv(object):
     def __init__(self):
         super().__init__()
         np.random.seed(1024)
-        # create dataloader & network
+        # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
         # load checkpoint
@@ -50,9 +50,9 @@ class PointRCNNEnv(object):
 
 
     def reset(self):
-        """ reset env; here it is equivlent to load an image and a bin from the KITTI dataset. Set the image as s0
+        """ reset env; here it is equivlent to load an image and a bin from the KITTI dataset. Set the image returned as s0
         """
-        pass
+        return RGB_Image 
 
     def step(self, action, obs=None):
         """step [Input the sampled map, output ]
@@ -64,7 +64,7 @@ class PointRCNNEnv(object):
         """
         batch_mAP = self.step()
         
-        
+
     def _get_obs(self):
         """Here we set next obs as the sampled point cloud 
         """
