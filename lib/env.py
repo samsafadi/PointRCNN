@@ -41,10 +41,10 @@ class PointRCNNEnv(object):
         load_ckpt_based_on_args(self.model, logger)
 
     def _batch_detector(self, batch_pts):
-        """ Input a single or batch sample of point cloud, output prediction result
+        """ Input a single or batch sample of point clouds, output prediction result
         """
         with torch.no_grad():
-            model.eval()
+            self.model.eval()
             thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
 
 
@@ -64,9 +64,11 @@ class PointRCNNEnv(object):
         """
         batch_mAP = self.step()
         
-    
+        
     def _get_obs(self):
-        pass
+        """Here we set next obs as the sampled point cloud 
+        """
+        return sampled_pts
     
     def render(self):
         """Placeholder for the rendering capacity
