@@ -16,9 +16,7 @@ def train(agent, env, config, device, debug, replay_buffer=None):
     # make some empty lists for logging.
     batch_obs = []          # for observations
     batch_acts = []         # for actions
-    batch_weights = []      # for reward-to-go weighting in policy gradient
     batch_rets = []         # for measuring episode returns
-    batch_lens = []  # for measuring episode lengths
     s0 = env.reset()
     for t in tqdm(range(config['total_steps'])):
         # if t > start_steps:
@@ -26,27 +24,31 @@ def train(agent, env, config, device, debug, replay_buffer=None):
         # else:
         #     action = env.sample_act()
         # actually here we only have 1 step; we only excute 1 action
-        act, _, _, _ = agent.get_action(s0, t)
+        a0, _, _, _ = agent.get_action(s0)
         with torch.no_grad():
-            s1, rew, done, _ = env.step(a0)
+            s1, r, done, _ = env.step(a0)
 
         if replay_buffer is None:
             # save action, reward
-            batch_acts.append(act)
-            ep_rews.append(rew)
+            batch_acts.append(a0)
+            batch_rews.append(r)
         else:
             # replay_buffer.push(s0.view(-1), a0.view(-1), reward.view(-1), s1.view(-1), done.view(-1))
-            pass 
+            pass
         
+        # reset the env if have done returned
         # actually done is always true in our current setting
         if done:
             s0 = env.reset()
 
-        # Update handling
-        if t >= config['batchsize'] and t % config['update_every'] == 0:
+        # Update
+        if t+1 >= config['batchsize']:
             # this seems to be important. that is: match the update steps to the update intervals
-            # for j in range(config['update_every']):
-            agent.update(replay_buffer,  )
+            agent.update(batch_obs, batch_acts, batch_rews)
+            # reset the buffer for the batch 
+            batch_obs = []          # for observations
+            batch_acts = []         # for actions
+            batch_rets = []         # for measuring episode returns
     
     
 def load_config(config_path):
