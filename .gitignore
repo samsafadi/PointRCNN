@@ -12,3 +12,4 @@
 tools/gt_database/
 .vim
 .vscode
+*.sh
