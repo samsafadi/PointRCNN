@@ -3,12 +3,14 @@
 """env file for interacting with data loader and PointRCNN detector
 
 TODO list
+    - [ ] Enabling loading image in the KITTI dataloader, currently seems it only return pts 
     - [ ] connect this env with KITTI dataloader and detector 
     - [ ] add a script for projecting point cloud onto XY plane for sampling purpose
 """
 
 import os
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
+from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
 
 
@@ -51,7 +53,21 @@ class PointRCNNEnv(object):
 
     def reset(self):
         """ reset env; here it is equivlent to load an image and a bin from the KITTI dataset. Set the image returned as s0
+
+        data = {'sample_id': sample_id, 
+                'random_select': self.random_select,
+                'pts_rect': pts_rect, 
+                'pts_intensity': pts_intensity,
+                'gt_boxes3d': all_gt_boxes3d, 
+                'npoints': self.npoints}
         """
+        data = next(iter(self.test_loader))
+
+        pts_intensity = data['pts_intensity']
+        pts_rect = data['pts_rect']
+        gt_boxes3d = data['gt_boxes3d']
+        RGB_Image = data['image']  # this is not enabled in the previous dataloader and we need to work it out
+        
         return RGB_Image 
 
     def step(self, action, obs=None):
