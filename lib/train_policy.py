@@ -26,7 +26,7 @@ def train(agent, env, config, device, debug, replay_buffer=None):
         # else:
         #     action = env.sample_act()
         # actually here we only have 1 step; we only excute 1 action
-        a0 = agent.pick_action(s0, t)
+        act, _, _, _ = agent.get_action(s0, t)
         with torch.no_grad():
             s1, rew, done, _ = env.step(a0)
 
@@ -43,10 +43,10 @@ def train(agent, env, config, device, debug, replay_buffer=None):
             s0 = env.reset()
 
         # Update handling
-        if t >= config['update_after'] and t % config['update_every'] == 0:
+        if t >= config['batchsize'] and t % config['update_every'] == 0:
             # this seems to be important. that is: match the update steps to the update intervals
             # for j in range(config['update_every']):
-            agent.update(replay_buffer, config['batch_size'])
+            agent.update(replay_buffer,  )
     
     
 def load_config(config_path):

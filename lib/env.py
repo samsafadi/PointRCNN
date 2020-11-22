@@ -8,7 +8,6 @@ class PointRCNNEnv(object):
     def __init__(self):
         super().__init__()
 
-
     def reset(self):
         """ reset env; here it is equivlent to load an image and a bin from the KITTI dataset. Set the image as s0
         """
@@ -19,12 +18,13 @@ class PointRCNNEnv(object):
         """
         return obs, rew, done, info 
 
-
     def get_reward(self, obs):
-        """step [Input the sampled map, output ]
+        """step [Input the sampled point cloud, output the detection success]
         """
         pass
 
+    def _get_obs(self):
+        pass
     
     def render(self):
         """Placeholder for the rendering capacity
