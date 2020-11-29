@@ -32,7 +32,7 @@ def create_dataloader(logger):
     return test_loader
 
 
-class PointRCNNEnv(object):
+class PointRCNNEnv():
     def __init__(self):
         super().__init__()
         np.random.seed(1024)
@@ -50,25 +50,25 @@ class PointRCNNEnv(object):
             thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
 
 
-
     def reset(self):
         """ reset env; here it is equivlent to load an image and a bin from the KITTI dataset. Set the image returned as s0
 
-        data = {'sample_id': sample_id, 
+        data = {'sample_id': sample_id,
                 'random_select': self.random_select,
-                'pts_rect': pts_rect, 
+                'pts_rect': pts_rect,
                 'pts_intensity': pts_intensity,
-                'gt_boxes3d': all_gt_boxes3d, 
-                'npoints': self.npoints}
+                'gt_boxes3d': all_gt_boxes3d,
+                'npoints': self.npoints,
+                'image': image}
         """
         data = next(iter(self.test_loader))
 
         pts_intensity = data['pts_intensity']
         pts_rect = data['pts_rect']
         gt_boxes3d = data['gt_boxes3d']
-        RGB_Image = data['image']  # this is not enabled in the previous dataloader and we need to work it out
+        RGB_Image = data['image']
         
-        return RGB_Image 
+        return RGB_Image, pts_rect, pts_intensity, gt_boxes3d
 
     def step(self, action, obs=None):
         """step [Input the sampled map, output ]

@@ -394,9 +394,11 @@ class KittiRCNNDataset(KittiDataset):
 
         pts_intensity = pts_intensity.reshape(len(pts_intensity), 1)
 
+        image = self.get_image(sample_id)
+
         sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
                         'pts_rect': pts_rect, 'pts_intensity': pts_intensity,
-                        'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints}
+                        'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints, 'image': image}
         return sample_info
 
     @staticmethod
