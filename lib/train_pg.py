@@ -54,3 +54,6 @@ if __name__ == "__main__":
     else:
         device = torch.device('cpu')
         print('Running on CPU')
+    
+
+    

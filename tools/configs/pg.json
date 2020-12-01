@@ -1,0 +1,6 @@
+
+{
+  "seed": 20,
+  "batchsize":32,
+  "policy": "pg"
+}

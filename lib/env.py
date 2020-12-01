@@ -12,9 +12,46 @@ import os
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
+import numpy as np
+import torch
+import logging
+import tools.train_utils.train_utils as train_utils
+from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
+import re
 
 
-def create_dataloader(logger):
+def load_part_ckpt(model, filename, logger, total_keys=-1):
+    if os.path.isfile(filename):
+        logger.info("==> Loading part model from checkpoint '{}'".format(filename))
+        checkpoint = torch.load(filename)
+        model_state = checkpoint['model_state']
+
+        update_model_state = {key: val for key, val in model_state.items() if key in model.state_dict()}
+        state_dict = model.state_dict()
+        state_dict.update(update_model_state)
+        model.load_state_dict(state_dict)
+
+        update_keys = update_model_state.keys().__len__()
+        if update_keys == 0:
+            raise RuntimeError
+        logger.info("==> Done (loaded %d/%d)" % (update_keys, total_keys))
+    else:
+        raise FileNotFoundError
+
+
+def load_ckpt_based_on_args(args, model, logger):
+    if args.ckpt is not None:
+        train_utils.load_checkpoint(model, filename=args.ckpt, logger=logger)
+
+    total_keys = model.state_dict().keys().__len__()
+    if cfg.RPN.ENABLED and args.rpn_ckpt is not None:
+        load_part_ckpt(model, filename=args.rpn_ckpt, logger=logger, total_keys=total_keys)
+
+    if cfg.RCNN.ENABLED and args.rcnn_ckpt is not None:
+        load_part_ckpt(model, filename=args.rcnn_ckpt, logger=logger, total_keys=total_keys)
+
+
+def create_dataloader(args, logger):
     mode = 'TEST' if args.test else 'EVAL'
     DATA_PATH = os.path.join('..', 'data')
 
@@ -32,15 +69,54 @@ def create_dataloader(logger):
     return test_loader
 
 
+def create_logger(log_file):
+    log_format = '%(asctime)s  %(levelname)5s  %(message)s'
+    logging.basicConfig(level=logging.INFO, format=log_format, filename=log_file)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter(log_format))
+    logging.getLogger(__name__).addHandler(console)
+    return logging.getLogger(__name__)
+
+
 class PointRCNNEnv():
-    def __init__(self):
+    def __init__(self, args, logger):
         super().__init__()
         np.random.seed(1024)
+        if args.cfg_file is not None:
+            cfg_from_file(args.cfg_file)
+        if args.set_cfgs is not None:
+            cfg_from_list(args.set_cfgs)
+        cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
+
+        # cfg_file = 'cfgs/default.yaml'
+
+
+        # define the logger here
+        root_result_dir = os.path.join(root_result_dir, 'eval')
+        # set epoch_id and output dir
+        num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
+        epoch_id = num_list[-1] if num_list.__len__() > 0 else 'no_number'
+        root_result_dir = os.path.join(root_result_dir, 'epoch_%s' % epoch_id, cfg.TEST.SPLIT)
+        if args.test:
+            root_result_dir = os.path.join(root_result_dir, 'test_mode')
+
+        if args.extra_tag != 'default':
+            root_result_dir = os.path.join(root_result_dir, args.extra_tag)
+        os.makedirs(root_result_dir, exist_ok=True)
+
+        log_file = os.path.join(root_result_dir, 'log_eval_one.txt')
+        logger = create_logger(log_file)
+        logger.info('**********************Start logging**********************')
+        for key, val in vars(args).items():
+            logger.info("{:16} {}".format(key, val))
+        save_config_to_file(cfg, logger=logger)
+
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
         # load checkpoint
-        load_ckpt_based_on_args(self.model, logger)
+        load_ckpt_based_on_args(args, self.model, logger)
 
     def _batch_detector(self, batch_pts):
         """ Input a single or batch sample of point clouds, output prediction result
@@ -48,6 +124,7 @@ class PointRCNNEnv():
         with torch.no_grad():
             self.model.eval()
             thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+
 
 
     def reset(self):
