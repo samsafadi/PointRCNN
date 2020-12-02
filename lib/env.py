@@ -78,39 +78,53 @@ def create_logger(log_file):
     logging.getLogger(__name__).addHandler(console)
     return logging.getLogger(__name__)
 
+def setup_configs(args):
+    if args.cfg_file is not None:
+        cfg_from_file(args.cfg_file)
+    if args.set_cfgs is not None:
+        cfg_from_list(args.set_cfgs)
+    cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
+
+    if args.ckpt_dir is not None:
+        ckpt_dir = args.ckpt_dir
+
+    if args.output_dir is not None:
+        root_result_dir = args.output_dir
+
+    if args.eval_mode == 'rcnn':
+        # we omit the other mode since we choose this mode
+        cfg.RCNN.ENABLED = True
+        cfg.RPN.ENABLED = cfg.RPN.FIXED = True
+        root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
+        ckpt_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG, 'ckpt')
+
+
+    # cfg_file = 'cfgs/default.yaml'
+    # define the logger here
+    root_result_dir = os.path.join(root_result_dir, 'eval')
+    # set epoch_id and output dir
+    num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
+    epoch_id = num_list[-1] if num_list.__len__() > 0 else 'no_number'
+    root_result_dir = os.path.join(root_result_dir, 'epoch_%s' % epoch_id, cfg.TEST.SPLIT)
+    if args.test:
+        root_result_dir = os.path.join(root_result_dir, 'test_mode')
+
+    if args.extra_tag != 'default':
+        root_result_dir = os.path.join(root_result_dir, args.extra_tag)
+    os.makedirs(root_result_dir, exist_ok=True)
+
+    log_file = os.path.join(root_result_dir, 'log_eval_one.txt')
+    logger = create_logger(log_file)
+    logger.info('**********************Start logging**********************')
+    for key, val in vars(args).items():
+        logger.info("{:16} {}".format(key, val))
+    save_config_to_file(cfg, logger=logger)
 
 class PointRCNNEnv():
     def __init__(self, args, logger):
         super().__init__()
         np.random.seed(1024)
-        if args.cfg_file is not None:
-            cfg_from_file(args.cfg_file)
-        if args.set_cfgs is not None:
-            cfg_from_list(args.set_cfgs)
-        cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
 
-        # cfg_file = 'cfgs/default.yaml'
-
-
-        # define the logger here
-        root_result_dir = os.path.join(root_result_dir, 'eval')
-        # set epoch_id and output dir
-        num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
-        epoch_id = num_list[-1] if num_list.__len__() > 0 else 'no_number'
-        root_result_dir = os.path.join(root_result_dir, 'epoch_%s' % epoch_id, cfg.TEST.SPLIT)
-        if args.test:
-            root_result_dir = os.path.join(root_result_dir, 'test_mode')
-
-        if args.extra_tag != 'default':
-            root_result_dir = os.path.join(root_result_dir, args.extra_tag)
-        os.makedirs(root_result_dir, exist_ok=True)
-
-        log_file = os.path.join(root_result_dir, 'log_eval_one.txt')
-        logger = create_logger(log_file)
-        logger.info('**********************Start logging**********************')
-        for key, val in vars(args).items():
-            logger.info("{:16} {}".format(key, val))
-        save_config_to_file(cfg, logger=logger)
 
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(logger)

@@ -1,6 +1,7 @@
 import torch
 import tqdm
 
+import argparse
 from env import PointRCNNEnv
 
 def train(agent, env, config, device, batch_size):
@@ -48,6 +49,16 @@ def train(agent, env, config, device, batch_size):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="arg parser")
+    
+    parser.add_argument("--eval_mode", type=str, default='rpn', required=True, help="specify the evaluation mode")
+
+
+    args = parser.parse_args()
+
+
+
+
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print('Running on GPU {}'.format(torch.cuda.get_device_name(0)))
@@ -56,4 +67,4 @@ if __name__ == "__main__":
         print('Running on CPU')
     
 
-    
+
