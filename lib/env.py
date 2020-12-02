@@ -86,19 +86,23 @@ def create_dataloader(args, logger):
 
 
 class PointRCNNEnv():
-    def __init__(self, config):
+    def __init__(self):
         super().__init__()
         np.random.seed(1024)
-        self.config = config
+        
         # create logger
         logger = create_logger(os.path.join(OUTPUT_DIR, 'log_pg.txt'))
+        logger.info('**********************Start logging**********************')
+        for key, val in vars(args).items():
+            logger.info("{:16} {}".format(key, val))
+        save_config_to_file(cfg, logger=logger)
+        
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
 
-        # THIS IS UNNECESSARY
         # load checkpoint
-        # load_ckpt_based_on_args(self.model, logger)
+        load_ckpt_based_on_args(args, self.model, logger)
 
     def _batch_detector(self, batch_pts):
         """ Input a single or batch sample of point clouds, output prediction result
@@ -106,7 +110,6 @@ class PointRCNNEnv():
         with torch.no_grad():
             self.model.eval()
             thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
-
 
 
     def reset(self):
