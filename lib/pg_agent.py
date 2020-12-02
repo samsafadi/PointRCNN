@@ -24,7 +24,8 @@ class PG(object):
         #   - For 1 class and background, use n_classes=1
         #   - For 2 classes, use n_classes=1
         #   - For N > 2 classes, use n_classes=N
-        # TODO now I assume input<->output size are equal, which might not be true, so we need some modifications onto Unet if necesary 
+        # TODO now I assume input<->output size are equal, which might not be true, so we need some modifications onto Unet if necesary
+        
         self.actor = UNet(n_channels=3, n_classes=1, bilinear=True) # [B, H, W] -> [B, H1, W2]
         self.optimizer = Adam(self.actor.parameters(), lr=configs['lr'])
 

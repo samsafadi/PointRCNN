@@ -17,6 +17,12 @@ from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 from lib.utils.bbox_transform import decode_bbox_target
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
+import numpy as np
+import torch
+import logging
+import tools.train_utils.train_utils as train_utils
+from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
+import re
 
 OUTPUT_DIR = '../output/pg_log/'
 
@@ -30,7 +36,38 @@ def create_logger(log_file):
     return logging.getLogger(__name__)
 
 
-def create_dataloader(logger):
+def load_part_ckpt(model, filename, logger, total_keys=-1):
+    if os.path.isfile(filename):
+        logger.info("==> Loading part model from checkpoint '{}'".format(filename))
+        checkpoint = torch.load(filename)
+        model_state = checkpoint['model_state']
+
+        update_model_state = {key: val for key, val in model_state.items() if key in model.state_dict()}
+        state_dict = model.state_dict()
+        state_dict.update(update_model_state)
+        model.load_state_dict(state_dict)
+
+        update_keys = update_model_state.keys().__len__()
+        if update_keys == 0:
+            raise RuntimeError
+        logger.info("==> Done (loaded %d/%d)" % (update_keys, total_keys))
+    else:
+        raise FileNotFoundError
+
+
+def load_ckpt_based_on_args(args, model, logger):
+    if args.ckpt is not None:
+        train_utils.load_checkpoint(model, filename=args.ckpt, logger=logger)
+
+    total_keys = model.state_dict().keys().__len__()
+    if cfg.RPN.ENABLED and args.rpn_ckpt is not None:
+        load_part_ckpt(model, filename=args.rpn_ckpt, logger=logger, total_keys=total_keys)
+
+    if cfg.RCNN.ENABLED and args.rcnn_ckpt is not None:
+        load_part_ckpt(model, filename=args.rcnn_ckpt, logger=logger, total_keys=total_keys)
+
+
+def create_dataloader(args, logger):
     mode = 'TEST' if args.test else 'EVAL'
     DATA_PATH = os.path.join('..', 'data')
 
@@ -63,13 +100,13 @@ class PointRCNNEnv():
         # load checkpoint
         # load_ckpt_based_on_args(self.model, logger)
 
-
     def _batch_detector(self, batch_pts):
         """ Input a single or batch sample of point clouds, output prediction result
         """
         with torch.no_grad():
             self.model.eval()
             thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+
 
 
     def reset(self):

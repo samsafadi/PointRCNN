@@ -1,4 +1,5 @@
 
 {
-  "seed": 20
+  "seed": 20,
+  "batchsize":32
 }

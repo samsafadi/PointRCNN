@@ -12,7 +12,7 @@ import argparse
 from tqdm import tqdm
 
 
-def train(agent, env, config, device, debug, replay_buffer=None):
+def train(agent, env, config, device, replay_buffer=None):
     # make some empty lists for logging.
     batch_obs = []          # for observations
     batch_acts = []         # for actions
@@ -31,7 +31,7 @@ def train(agent, env, config, device, debug, replay_buffer=None):
         if replay_buffer is None:
             # save action, reward
             batch_acts.append(a0)
-            batch_rews.append(r)
+            batch_rets.append(r)
         else:
             # replay_buffer.push(s0.view(-1), a0.view(-1), reward.view(-1), s1.view(-1), done.view(-1))
             pass
@@ -41,10 +41,9 @@ def train(agent, env, config, device, debug, replay_buffer=None):
         if done:
             s0 = env.reset()
 
-        # Update
+        # Update after collect one batch
         if t+1 >= config['batchsize']:
-            # this seems to be important. that is: match the update steps to the update intervals
-            agent.update(batch_obs, batch_acts, batch_rews)
+            agent.update(batch_obs, batch_acts, batch_rets)
             # reset the buffer for the batch 
             batch_obs = []          # for observations
             batch_acts = []         # for actions
@@ -64,11 +63,10 @@ if __name__ == "__main__":
         args.device = torch.device('cpu')
         print('Running on CPU')
 
-    config_path = '/config/sac.json'
+    config_path = '/config/pg.json'
     config = load_config(config_path)
-    debug = True
 
-    # initialize the PointRCNNEnv and set it networks into eval mode
+    # initialize the PointRCNNEnv and set its networks into eval mode
     env = PointRCNNEnv(config)
 
     # initialize the agent along with the networks inside it
@@ -79,6 +77,6 @@ if __name__ == "__main__":
         agent = SAC_Discrete(config)
         replay_buffer = ReplayBuffer(config['replay_buffer_size'])
 
-    train(agent, env, config, device, debug, replay_buffer)
+    train(agent, env, config, device, replay_buffer)
 
 
