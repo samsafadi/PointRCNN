@@ -9,9 +9,25 @@ TODO list
 """
 
 import os
+import logging
+import torch
+import numpy as np
+
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
+from lib.utils.bbox_transform import decode_bbox_target
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
+
+OUTPUT_DIR = '../output/pg_log/'
+
+def create_logger(log_file):
+    log_format = '%(asctime)s  %(levelname)5s  %(message)s'
+    logging.basicConfig(level=logging.INFO, format=log_format, filename=log_file)
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter(log_format))
+    logging.getLogger(__name__).addHandler(console)
+    return logging.getLogger(__name__)
 
 
 def create_dataloader(logger):
@@ -33,14 +49,20 @@ def create_dataloader(logger):
 
 
 class PointRCNNEnv():
-    def __init__(self):
+    def __init__(self, config):
         super().__init__()
         np.random.seed(1024)
+        self.config = config
+        # create logger
+        logger = create_logger(os.path.join(OUTPUT_DIR, 'log_pg.txt'))
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
+
+        # THIS IS UNNECESSARY
         # load checkpoint
-        load_ckpt_based_on_args(self.model, logger)
+        # load_ckpt_based_on_args(self.model, logger)
+
 
     def _batch_detector(self, batch_pts):
         """ Input a single or batch sample of point clouds, output prediction result
@@ -73,6 +95,7 @@ class PointRCNNEnv():
     def step(self, action, obs=None):
         """step [Input the sampled map, output ]
         """
+        # TODO: this is where we need to 
         return obs, rew, done, info 
 
     def _get_reward(self, obs):
@@ -90,3 +113,51 @@ class PointRCNNEnv():
         """Placeholder for the rendering capacity
         """
         raise NotImplementedError
+
+    def _eval_data(self, data):
+        """eval data with RCNN model
+        """
+        sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
+            data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
+
+        inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float()
+        input_data = {'pts_input': inputs}
+
+        # model inference
+        ret_dict = self.model(input_data)
+
+        roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
+        roi_boxes3d = ret_dict['rois']  # (B, M, 7)
+        seg_result = ret_dict['seg_result'].long()  # (B, N)
+
+        # set batch size to one for now
+        batch_size = 1
+
+        rcnn_cls = ret_dict['rcnn_cls'].view(batch_size, -1, ret_dict['rcnn_cls'].shape[1])
+        rcnn_reg = ret_dict['rcnn_reg'].view(batch_size, -1, ret_dict['rcnn_reg'].shape[1])  # (B, M, C)
+
+        # bounding box regression
+        anchor_size = MEAN_SIZE
+
+        pred_boxes3d = decode_bbox_target(roi_boxes3d.view(-1, 7), rcnn_reg.view(-1, rcnn_reg.shape[-1]),
+                                          anchor_size=anchor_size,
+                                          loc_scope=cfg.RCNN.LOC_SCOPE,
+                                          loc_bin_size=cfg.RCNN.LOC_BIN_SIZE,
+                                          num_head_bin=cfg.RCNN.NUM_HEAD_BIN,
+                                          get_xz_fine=True, get_y_by_bin=cfg.RCNN.LOC_Y_BY_BIN,
+                                          loc_y_scope=cfg.RCNN.LOC_Y_SCOPE, loc_y_bin_size=cfg.RCNN.LOC_Y_BIN_SIZE,
+                                          get_ry_fine=True).view(batch_size, -1, 7)
+
+        # Intersect over union
+        iou3d = iou3d_utils.boxes_iou3d_gpu(pred_boxes3d[0], gt_boxes3d)
+        gt_max_iou, _ = iou3d.max(dim=0)
+
+        # Recall is how many of the gt boxes were predicted
+        recalled_num = (gt_max_iou > 0.7).sum().item()
+        total_boxes = len(gt_boxes3d)
+
+        # Return ratio unless total boxes is zero
+        if total_boxes == 0:
+            return None
+        else:
+            return recalled_num / total_boxes

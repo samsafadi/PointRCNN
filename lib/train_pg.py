@@ -1,9 +1,11 @@
 import torch
 import tqdm
+import json
 
 from env import PointRCNNEnv
+from pg_agent import PG
 
-def train(agent, env, config, device, batch_size):
+def train(agent, env, config, device):
     """
     train pg model
     """
@@ -40,11 +42,16 @@ def train(agent, env, config, device, batch_size):
             state, done, ep_rews = env.reset(), False, []
 
             # end experience loop if we have enough of it
-            if len(batch_obs) > batch_size:
+            if len(batch_obs) > config['batchsize']:
                 break
 
     batch_loss = agent.update(batch_obs, batch_acts, batch_rets)
     return batch_loss, batch_rets, batch_lens
+
+
+def load_config(config_path):
+    with open(config_path, 'r') as f:
+        return json.load(f)
 
 
 if __name__ == "__main__":
@@ -54,3 +61,14 @@ if __name__ == "__main__":
     else:
         device = torch.device('cpu')
         print('Running on CPU')
+
+    config_path = '/config/sac.json'
+    config = load_config(config_path)
+    debug = True
+
+    # initialize the PointRCNNEnv and set it networks into eval mode
+    env = PointRCNNEnv(config)
+
+    # initialize the agent along with the networks inside it
+    agent = PG(config, env=env)
+    train(agent, env, config, device)
