@@ -73,9 +73,6 @@ if __name__ == "__main__":
         device = torch.device('cpu')
         print('Running on CPU')
 
-<<<<<<< HEAD
-
-=======
     config_path = '/config/sac.json'
     config = load_config(config_path)
     debug = True
@@ -86,4 +83,3 @@ if __name__ == "__main__":
     # initialize the agent along with the networks inside it
     agent = PG(config, env=env)
     train(agent, env, config, device)
->>>>>>> b4779b0298a98669acef2dc6de13931c3c2848f5

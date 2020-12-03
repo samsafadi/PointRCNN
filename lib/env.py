@@ -15,12 +15,14 @@ import numpy as np
 
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 from lib.utils.bbox_transform import decode_bbox_target
+from lib.utils import kitti_utils
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
 import numpy as np
 import torch
 import logging
 import tools.train_utils.train_utils as train_utils
+from tools.kitti_object_eval_python.eval import get_official_eval_result
 from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
 import re
 
@@ -186,6 +188,9 @@ class PointRCNNEnv():
         roi_boxes3d = ret_dict['rois']  # (B, M, 7)
         seg_result = ret_dict['seg_result'].long()  # (B, N)
 
+        # say batch size is one for now
+        pred_score = roi_scores_raw[0]
+
         # set batch size to one for now
         batch_size = 1
 
@@ -211,9 +216,127 @@ class PointRCNNEnv():
         # Recall is how many of the gt boxes were predicted
         recalled_num = (gt_max_iou > 0.7).sum().item()
         total_boxes = len(gt_boxes3d)
+        
+        """
+        Annotations - how kitti eval interprets the information from kitti_common.py
+        annotations.update({                                                                                                                                                                                                                                                                                                                
+            'name': [],
+            'truncated': [],
+            'occluded': [],
+            'alpha': [],
+            'bbox': [],
+            'dimensions': [],
+            'location': [],
+            'rotation_y': []
+        })
 
-        # Return ratio unless total boxes is zero
-        if total_boxes == 0:
-            return None
+        How it saves to the file in eval_rcnn.py
+        print('%s -1 -1 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f' %
+              (cfg.CLASSES, alpha, img_boxes[k, 0], img_boxes[k, 1], img_boxes[k, 2], img_boxes[k, 3],
+               bbox3d[k, 3], bbox3d[k, 4], bbox3d[k, 5], bbox3d[k, 0], bbox3d[k, 1], bbox3d[k, 2],
+               bbox3d[k, 6], scores[k]), file=f)
+
+        How it reads from it into annotations
+        annotations['name'] = np.array([x[0] for x in content])
+        annotations['truncated'] = np.array([float(x[1]) for x in content])
+        annotations['occluded'] = np.array([int(x[2]) for x in content])
+        annotations['alpha'] = np.array([float(x[3]) for x in content])
+        annotations['bbox'] = np.array(
+            [[float(info) for info in x[4:8]] for x in content]).reshape(-1, 4)
+        # dimensions will convert hwl format to standard lhw(camera) format.
+        annotations['dimensions'] = np.array(
+            [[float(info) for info in x[8:11]] for x in content]).reshape(
+                -1, 3)[:, [2, 0, 1]]
+        annotations['location'] = np.array(
+            [[float(info) for info in x[11:14]] for x in content]).reshape(-1, 3)
+        annotations['rotation_y'] = np.array(
+            [float(x[14]) for x in content]).reshape(-1)
+        if len(content) != 0 and len(content[0]) == 16:  # have score
+            annotations['score'] = np.array([float(x[15]) for x in content])
         else:
-            return recalled_num / total_boxes
+            annotations['score'] = np.zeros([len(annotations['bbox'])])
+
+        NOTE: TO GET ALPHA
+        x, z, ry = bbox3d[k, 0], bbox3d[k, 2], bbox3d[k, 6]
+        beta = np.arctan2(z, x)
+        alpha = -np.sign(beta) * np.pi / 2 + beta + ry
+
+        OCCLUDED AND TRUNCATED SEEM TO ALWAYS BE -1
+
+        NOTE: TO GET IMAGE BOXES
+        corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
+        img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
+        """
+
+        pred_annos = []
+
+        for k, bbox3d in enumerate(pred_boxes3d):
+            anno = {}
+            anno.update({                                                                                                                                                                                                                                                                                                                
+                'name': [],
+                'truncated': [],
+                'occluded': [],
+                'alpha': [],
+                'bbox': [],
+                'dimensions': [],
+                'location': [],
+                'rotation_y': []
+            })
+
+            anno['name'] = cfg.CLASSES
+            anno['truncated'], anno['occluded'] = -1, -1
+
+            # Get image boxes
+            calib = self.test_loader.dataset.get_calib(sample_id)
+            corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
+            img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
+            anno['bbox'] = img_boxes[k, 0:3]
+
+            x, z, ry = bbox3d[k, 0], bbox3d[k, 2], bbox3d[k, 6]
+            beta = np.arctan2(z, x)
+            alpha = -np.sign(beta) * np.pi / 2 + beta + ry
+
+            anno['alpha'] = np.array([alpha])
+            # dimensions will convert hwl format to standard lhw(camera) format.
+            anno['dimensions'] = np.array([bbox3d[k, 5], bbox3d[k, 3], bbox3d[k, 4]])
+            anno['location'] = bbox3d[k, 0:3]
+            anno['rotation_y'] = np.array([bbox3d[k, 6]])
+            anno['score'] = pred_score
+            pred_annos.append(anno)
+
+        label_annos = []
+        for k, bbox3d in enumerate(gt_boxes3d):
+            anno = {}
+            anno.update({                                                                                                                                                                                                                                                                                                                
+                'name': [],
+                'truncated': [],
+                'occluded': [],
+                'alpha': [],
+                'bbox': [],
+                'dimensions': [],
+                'location': [],
+                'rotation_y': []
+            })
+
+            anno['name'] = cfg.CLASSES
+            anno['truncated'], anno['occluded'] = -1, -1
+
+            # Get image boxes
+            calib = self.test_loader.dataset.get_calib(sample_id)
+            corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
+            img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
+            anno['bbox'] = img_boxes[k, 0:3]
+
+            x, z, ry = bbox3d[k, 0], bbox3d[k, 2], bbox3d[k, 6]
+            beta = np.arctan2(z, x)
+            alpha = -np.sign(beta) * np.pi / 2 + beta + ry
+
+            anno['alpha'] = np.array([alpha])
+            # dimensions will convert hwl format to standard lhw(camera) format.
+            anno['dimensions'] = np.array([bbox3d[k, 5], bbox3d[k, 3], bbox3d[k, 4]])
+            anno['location'] = bbox3d[k, 0:3]
+            anno['rotation_y'] = np.array([bbox3d[k, 6]])
+            label_annos.append(anno)
+
+        return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
+ 
