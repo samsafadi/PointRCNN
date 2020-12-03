@@ -1,3 +1,9 @@
+"""
+python3 sparsify.py --calib_path  '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/calib/'\
+    --image_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne//image_2/' --ptc_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne/'\
+    --split_file '/root/gdrive/My Drive/PointRCNN/data/KITTI/ImageSets/train.txt' --output_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/sparsified/' --W 1024 --slice 1 --H 64 --threads 1
+"""
+
 import argparse
 import os.path as osp
 import time
@@ -135,6 +141,8 @@ def gen_sparse_points_all(args):
         res.append((data_idx, pool.apply_async(
             sparse_and_save, args=(args, data_idx),
             callback=update)))
+        print(aaa)
+        print(ccc)
 
     pool.close()
     pool.join()
