@@ -1,7 +1,11 @@
 """
 python3 sparsify.py --calib_path  '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/calib/'\
-    --image_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne//image_2/' --ptc_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne/'\
-    --split_file '/root/gdrive/My Drive/PointRCNN/data/KITTI/ImageSets/train.txt' --output_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/sparsified/' --W 1024 --slice 1 --H 64 --threads 1
+    --image_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/image_2/' --ptc_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne/'\
+    --split_file '/root/gdrive/My Drive/PointRCNN/data/KITTI/ImageSets/train.txt' --output_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/sparsified/' --W 1024 --slice 1 --H 64 
+
+git config --global user.email "zhaoguangyuan@ucla.edu"
+git config --global user.name "zhaoguangyuan123"
+
 """
 
 import argparse
@@ -31,7 +35,7 @@ def pto_ang_map(velo_points, H=64, W=512, slice=1, line_spec=None,
 
     x, y, z, i = velo_points[:, 0], velo_points[:,
                                                 1], velo_points[:, 2], velo_points[:, 3]
-
+    print('velo_points', velo_points[:4])
     d = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     r = np.sqrt(x ** 2 + y ** 2)
     d[d == 0] = 0.000001
@@ -43,6 +47,9 @@ def pto_ang_map(velo_points, H=64, W=512, slice=1, line_spec=None,
 
     theta = np.radians(2.) - np.arcsin(z / d)
     theta_ = (theta / dtheta).astype(int)
+    print('theta_', theta_.shape)
+    print('theta_', theta_[:100])
+
     theta_[theta_ < 0] = 0
     theta_[theta_ >= H] = H - 1
 
@@ -74,12 +81,19 @@ def pto_ang_map(velo_points, H=64, W=512, slice=1, line_spec=None,
 
 
 def gen_sparse_points(data_idx, args):
+    print('check point')
+
     calib = Calibration(
         osp.join(args.calib_path, "{:06d}.txt".format(data_idx)))
+    
     pc_velo = load_velo_scan(
         osp.join(args.ptc_path, "{:06d}.bin".format(data_idx)))
+    print('pc_velo', pc_velo.shape)
+
     img = load_image(osp.join(args.image_path, "{:06d}.png".format(data_idx)))
     img_height, img_width, img_channel = img.shape
+
+    print('img', img.shape)
 
     _, _, valid_inds_fov = get_lidar_in_image_fov(
         pc_velo[:, :3], calib, 0, 0, img_width, img_height, True)
@@ -92,6 +106,9 @@ def gen_sparse_points(data_idx, args):
                  (pc_velo[:, 2] < 1.5) & \
                  (pc_velo[:, 2] >= -2.5)
     pc_velo = pc_velo[valid_inds]
+
+
+    print('pc_velo', pc_velo.shape)
 
     if args.fill_in_map_dir is not None and (args.fill_in_spec is not None or args.fill_in_slice is not None):
         fill_in_line = np.load(os.path.join(
@@ -116,6 +133,7 @@ def gen_sparse_points(data_idx, args):
 
 def sparse_and_save(args, data_idx):
     sparse_points = gen_sparse_points(data_idx, args)
+    print('sparse_points', sparse_points.shape)
     sparse_points = sparse_points.astype(np.float32)
     sparse_points.tofile(args.output_path + '/' + '%06d.bin' % (data_idx))
 
@@ -137,12 +155,18 @@ def gen_sparse_points_all(args):
 
     def update(*a):
         pbar.update()
+    i = 0 
     for data_idx in data_idx_list:
-        res.append((data_idx, pool.apply_async(
-            sparse_and_save, args=(args, data_idx),
-            callback=update)))
-        print(aaa)
-        print(ccc)
+        # res.append((data_idx, pool.apply_async(
+        #     sparse_and_save, args=(args, data_idx),
+        #     callback=update)))
+        sparse_and_save(args, data_idx)
+
+        
+        i = i+1 
+        print( 'i=', i)
+        if i >1:
+            break
 
     pool.close()
     pool.join()
