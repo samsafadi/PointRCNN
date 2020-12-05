@@ -136,7 +136,7 @@ class PointRCNNEnv():
         """step [Input the sampled map, output ]
         """
         # TODO: this is where we need to
-        obs = self._get_obs(scanning_mask=action)
+        obs = self._get_obs(scanning_mask=action, data)
         rew = self._get_reward(obs)
 
         # we set it as 1 step MDP so done is always true 
@@ -153,17 +153,23 @@ class PointRCNNEnv():
         return batch_mAP
         
 
-    def _get_obs(self, data):
+    def _get_obs(self, scanning_mask, data):
         """Here we set next obs as the sampled point cloud 
         """
-        data['npoints'] = self._get_pts_from_mask()
+        data['npoints'] = self._get_pts_from_mask(mask)
         obs = data['npoints']
 
         return obs
 
-    def _get_pts_from_mask(self, masks):
-        
-        pass 
+    def _get_pts_from_mask(self, mask):
+        # load 
+        ang_depth_map = np.load(os.path.join(
+            args.angle_map_dir, "{:06d}.npy".format(data['sample_id'])))
+
+        pts = depth_map.reshape((-1, 4)) 
+        pts = depth_map[pts[:, 0] != -1.0]  # ~(1500, )
+        # pass 
+        return depth_map
     
     def render(self):
         """Placeholder for the rendering capacity
