@@ -87,7 +87,7 @@ __C.RCNN.MASK_TYPE = 'seg'
 __C.RCNN.USE_INTENSITY = False
 __C.RCNN.USE_DEPTH = True
 __C.RCNN.USE_SEG_SCORE = False
-__C.RCNN.ROI_SAMPLE_JIT = False
+__C.RCNN.ROI_SAMPLE_JIT = True
 __C.RCNN.ROI_FG_AUG_TIMES = 10
 
 __C.RCNN.REG_AUG_METHOD = 'multiple'  # multiple, single, normal

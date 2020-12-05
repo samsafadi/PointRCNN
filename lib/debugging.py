@@ -5,4 +5,5 @@ my_env = PointRCNNEnv()
 
 loader = my_env.test_loader
 data = loader.dataset.__getitem__(0)
-print(data)
+
+my_env._eval_data(data)

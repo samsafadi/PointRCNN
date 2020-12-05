@@ -19,6 +19,7 @@ import re
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 from lib.utils.bbox_transform import decode_bbox_target
 from lib.utils import kitti_utils
+import lib.utils.iou3d.iou3d_utils as iou3d_utils
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
 import logging
@@ -101,7 +102,6 @@ class PointRCNNEnv():
         # load config
         config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
         config = load_config(config_path)
-        # print(cfg)
 
         root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
         ckpt_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG, 'ckpt')
@@ -113,12 +113,11 @@ class PointRCNNEnv():
             logger.info("{:16} {}".format(key, val))
         save_config_to_file(cfg, logger=logger)
 
-        print(cfg.RCNN.ENABLED, cfg.RPN.ENABLED)
-        
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(config, logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
         self.model.cuda()
+        self.model.eval()
 
         # load checkpoint
         load_ckpt_based_on_cfg(config, self.model, logger)
@@ -192,10 +191,13 @@ class PointRCNNEnv():
     def _eval_data(self, data):
         """eval data with RCNN model
         """
+        MEAN_SIZE = torch.from_numpy(cfg.CLS_MEAN_SIZE[0]).cuda()
         sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
             data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
 
-        inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float()
+        inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float().view(1, -1, 3)
+        gt_boxes3d = torch.from_numpy(gt_boxes3d).cuda(non_blocking=True)
+        print(gt_boxes3d.shape)
         input_data = {'pts_input': inputs}
 
         # model inference

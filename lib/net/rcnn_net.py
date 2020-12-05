@@ -153,6 +153,7 @@ class RCNNNet(nn.Module):
 
                 pts_input = pooled_features.view(-1, pooled_features.shape[2], pooled_features.shape[3])
         else:
+            print(input_data)
             pts_input = input_data['pts_input']
             target_dict = {}
             target_dict['pts_input'] = input_data['pts_input']
