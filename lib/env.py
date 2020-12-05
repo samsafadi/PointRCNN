@@ -94,7 +94,7 @@ def load_config(config_path):
 
 
 class PointRCNNEnv():
-    def __init__(self, use_masked=False):
+    def __init__(self, use_masked=True):
         super().__init__()
         np.random.seed(1024)
         
@@ -146,13 +146,8 @@ class PointRCNNEnv():
 
         # load the data sample at the reset step
         self.data = next(iter(self.test_loader))
-
-        # pts_intensity = data['pts_intensity']
-        # pts_rect = data['pts_rect']
-        # gt_boxes3d = data['gt_boxes3d']
         RGB_Image = self.data['image']
         
-        # return RGB_Image, pts_rect, pts_intensity, gt_boxes3d
         return RGB_Image
 
     def step(self, action):
