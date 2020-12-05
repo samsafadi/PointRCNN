@@ -9,23 +9,24 @@ TODO list
 """
 
 import os
+import sys
 import logging
 import torch
+import json
 import numpy as np
+import re
 
 from lib.datasets.kitti_rcnn_dataset import KittiRCNNDataset
 from lib.utils.bbox_transform import decode_bbox_target
 from lib.utils import kitti_utils
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
-import numpy as np
-import torch
 import logging
 import tools.train_utils.train_utils as train_utils
 from tools.kitti_object_eval_python.eval import get_official_eval_result
 from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
-import re
 
+HOME_DIR = os.path.join(os.getcwd(), '..')
 OUTPUT_DIR = '../output/pg_log/'
 
 def create_logger(log_file):
@@ -46,6 +47,7 @@ def load_part_ckpt(model, filename, logger, total_keys=-1):
 
         update_model_state = {key: val for key, val in model_state.items() if key in model.state_dict()}
         state_dict = model.state_dict()
+        print(state_dict)
         state_dict.update(update_model_state)
         model.load_state_dict(state_dict)
 
@@ -57,34 +59,39 @@ def load_part_ckpt(model, filename, logger, total_keys=-1):
         raise FileNotFoundError
 
 
-def load_ckpt_based_on_args(args, model, logger):
-    if args.ckpt is not None:
-        train_utils.load_checkpoint(model, filename=args.ckpt, logger=logger)
+def load_ckpt_based_on_cfg(config, model, logger):
+    if config['ckpt'] is not None:
+        train_utils.load_checkpoint(model, filename=config['ckpt'], logger=logger)
 
     total_keys = model.state_dict().keys().__len__()
-    if cfg.RPN.ENABLED and args.rpn_ckpt is not None:
-        load_part_ckpt(model, filename=args.rpn_ckpt, logger=logger, total_keys=total_keys)
+    if cfg.RPN.ENABLED and config['rpn_ckpt'] is not None:
+        load_part_ckpt(model, filename=config['rpn_ckpt'], logger=logger, total_keys=total_keys)
 
-    if cfg.RCNN.ENABLED and args.rcnn_ckpt is not None:
-        load_part_ckpt(model, filename=args.rcnn_ckpt, logger=logger, total_keys=total_keys)
+    if cfg.RCNN.ENABLED and config['rcnn_ckpt'] is not None:
+        load_part_ckpt(model, filename=config['rcnn_ckpt'], logger=logger, total_keys=total_keys)
 
 
-def create_dataloader(args, logger):
-    mode = 'TEST' if args.test else 'EVAL'
+def create_dataloader(config, logger):
+    mode = 'TEST' if config['test'] else 'EVAL'
     DATA_PATH = os.path.join('..', 'data')
 
     # create dataloader
     test_set = KittiRCNNDataset(root_dir=DATA_PATH, npoints=cfg.RPN.NUM_POINTS, split=cfg.TEST.SPLIT, mode=mode,
-                                random_select=args.random_select,
-                                rcnn_eval_roi_dir=args.rcnn_eval_roi_dir,
-                                rcnn_eval_feature_dir=args.rcnn_eval_feature_dir,
+                                random_select=config['random_select'],
+                                rcnn_eval_roi_dir=config['rcnn_eval_roi_dir'],
+                                rcnn_eval_feature_dir=config['rcnn_eval_feature_dir'],
                                 classes=cfg.CLASSES,
                                 logger=logger)
 
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, pin_memory=True,
-                             num_workers=args.workers, collate_fn=test_set.collate_batch)
+    test_loader = DataLoader(test_set, batch_size=config['batch_size'], shuffle=False, pin_memory=True,
+                             num_workers=config['workers'], collate_fn=test_set.collate_batch)
 
     return test_loader
+
+
+def load_config(config_path):
+    with open(config_path, 'r') as f:
+        return json.load(f)
 
 
 class PointRCNNEnv():
@@ -92,19 +99,25 @@ class PointRCNNEnv():
         super().__init__()
         np.random.seed(1024)
         
+        # load config
+        config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
+        config = load_config(config_path)
+        print(cfg)
+
         # create logger
         logger = create_logger(os.path.join(OUTPUT_DIR, 'log_pg.txt'))
         logger.info('**********************Start logging**********************')
-        for key, val in vars(args).items():
+        for key, val in config.items():
             logger.info("{:16} {}".format(key, val))
         save_config_to_file(cfg, logger=logger)
         
         # create PointRCNN dataloader & network
-        self.test_loader = create_dataloader(logger)
+        self.test_loader = create_dataloader(config, logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
+        self.model.cuda()
 
         # load checkpoint
-        load_ckpt_based_on_args(args, self.model, logger)
+        load_ckpt_based_on_cfg(config, self.model, logger)
 
     # def _batch_detector(self, batch_pts):
     #     """ Input a single or batch sample of point clouds, output prediction result
@@ -339,4 +352,3 @@ class PointRCNNEnv():
             label_annos.append(anno)
 
         return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
- 

@@ -1,6 +1,27 @@
 
 {
   "seed": 20,
-  "batchsize":32,
-  "policy": "pg"
+  "batch_size": 1,
+  "workers": 1,
+  "policy": "pg",
+  "test": false,
+  "random_select": true,
+  "rcnn_eval_roi_dir": null,
+  "rcnn_eval_feature_dir": null,
+  "ckpt": "../tools/PointRCNN.pth",
+  "eval_mode": "rcnn",
+  "cfg_file": "cfgs/default.yml",
+  "eval_all": false,
+  "test": false,
+  "rpn_ckpt": null,
+  "rcnn_ckpt": null,
+  "extra_tag": "default",
+  "output_dir": null,
+  "ckpt_dir": null,
+  "save_result": false,
+  "save_rpn_feature": false,
+  "start_epoch": 0,
+  "rcnn_eval_roi_dir": null,
+  "rcnn_eval_feature_dir": null,
+  "set": "RPN.LOC_XZ_FINE False" 
 }
