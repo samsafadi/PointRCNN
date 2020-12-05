@@ -29,7 +29,6 @@ from data_utils.kitti_util import rotz, Calibration, load_image, load_velo_scan
 from multiprocessing import Process, Queue, Pool
 
 
-
 def pto_ang_map(data_idx, velo_points, H=64, W=512, slice=1, line_spec=None,
                 get_lines=False, fill_in_line=None, fill_in_spec=None,
                 fill_in_slice=None):
