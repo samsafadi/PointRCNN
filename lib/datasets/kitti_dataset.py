@@ -23,7 +23,7 @@ class KittiDataset(torch_data.Dataset):
         self.plane_dir = os.path.join(self.imageset_dir, 'planes')
 
     def get_image(self, idx):
-        assert False, 'DO NOT USE cv2 NOW, AVOID DEADLOCK'
+        # assert False, 'DO NOT USE cv2 NOW, AVOID DEADLOCK'
         import cv2
         # cv2.setNumThreads(0)  # for solving deadlock when switching epoch
         img_file = os.path.join(self.image_dir, '%06d.png' % idx)

@@ -1,10 +1,13 @@
 import torch
 import tqdm
 import json
+import sys
+
+sys.path.append('../')
 
 import argparse
-from env import PointRCNNEnv
-from pg_agent import PG
+from lib.env import PointRCNNEnv
+from lib.pg_agent import PG
 
 def train(agent, env, config, device):
     """
@@ -63,9 +66,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-
-
-
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print('Running on GPU {}'.format(torch.cuda.get_device_name(0)))
@@ -73,17 +73,13 @@ if __name__ == "__main__":
         device = torch.device('cpu')
         print('Running on CPU')
 
-<<<<<<< HEAD
-
-=======
-    config_path = '/config/sac.json'
+    config_path = '/pg.json'
     config = load_config(config_path)
     debug = True
 
     # initialize the PointRCNNEnv and set it networks into eval mode
-    env = PointRCNNEnv(config)
+    env = PointRCNNEnv()
 
     # initialize the agent along with the networks inside it
     agent = PG(config, env=env)
     train(agent, env, config, device)
->>>>>>> b4779b0298a98669acef2dc6de13931c3c2848f5
