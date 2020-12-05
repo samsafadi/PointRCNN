@@ -95,7 +95,7 @@ def load_config(config_path):
 
 
 class PointRCNNEnv():
-    def __init__(self):
+    def __init__(self, use_masked=True):
         super().__init__()
         np.random.seed(1024)
         
@@ -119,6 +119,7 @@ class PointRCNNEnv():
         self.model.cuda()
         self.model.eval()
 
+        self.use_masked = use_masked
         # load checkpoint
         load_ckpt_based_on_cfg(config, self.model, logger)
 
@@ -141,21 +142,20 @@ class PointRCNNEnv():
                 'npoints': self.npoints,
                 'image': image}
         """
-        data = next(iter(self.test_loader))
 
-        pts_intensity = data['pts_intensity']
-        pts_rect = data['pts_rect']
-        gt_boxes3d = data['gt_boxes3d']
-        RGB_Image = data['image']
+        # load the data sample at the reset step
+        self.data = next(iter(self.test_loader))
+        RGB_Image = self.data['image']
         
-        return RGB_Image, pts_rect, pts_intensity, gt_boxes3d
+        return RGB_Image
 
-    def step(self, action, obs=None):
+    def step(self, action):
         """step [Input the sampled map, output ]
         """
+
         # TODO: this is where we need to
-        obs = self._get_obs(scanning_mask=action)
-        rew = self._get_reward(obs)
+        obs_pts = self._get_obs(action) # Here we output masked_pts as the obs 
+        rew = self._get_reward(obs_pts) 
 
         # we set it as 1 step MDP so done is always true 
         done = True
@@ -165,35 +165,59 @@ class PointRCNNEnv():
     def _get_reward(self, obs):
         """step [Input the sampled point cloud, output the detection success]
         """
-        # Guangyuan: batchsize should be 1, right?
-        batch_mAP = self._eval_data(obs)
-
+        batch_mAP = self._eval_data(masked_pts=obs)
         return batch_mAP
         
 
-    def _get_obs(self, data):
+    def _get_obs(self, scanning_mask):
         """Here we set next obs as the sampled point cloud 
         """
-        data['npoints'] = self._get_pts_from_mask()
-        obs = data['npoints']
+        masked_pts = self._get_pts_from_mask(scanning_mask)
+        return masked_pts
 
-        return obs
+    def _get_pts_from_mask(self, scanning_mask):
+        """ mask pts from 2d angular map
+        Input: 
+            :param mask: (H, W)
+            :param pts_intensity: (N, 1)
+        Return:
+            :param pts: (N, 4)
+        """
 
-    def _get_pts_from_mask(self, masks):
-        
-        pass 
+        # load ang_depth_map from dir
+        ang_depth_map = np.load(os.path.join(
+            args.angle_map_dir, "{:06d}.npy".format(self.data['sample_id'])))  # (H,W,4)
+
+        # expand mask 2d->3d to enable broadcast
+        mask = np.expand_dims(mask, axis=2)
+    
+        masked_ang_depth_map = mask*ang_depth_map
+
+        masked_pts = masked_ang_depth_map.reshape((-1, 4)) 
+        masked_pts = masked_ang_depth_map[masked_pts[:, 0] != -1.0]  # around ~(15000,4)
+
+        return masked_pts
     
     def render(self):
         """Placeholder for the rendering capacity
         """
         raise NotImplementedError
 
-    def _eval_data(self, data):
-        """eval data with RCNN model
+    def _eval_data(self, masked_pts=None):
+        """eval data with sampled pts
         """
         MEAN_SIZE = torch.from_numpy(cfg.CLS_MEAN_SIZE[0]).cuda()
+
+        # get valid point (projected points should be in image)
         sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
-            data['sample_id'], data['pts_rect'], data['pts_intensity'], data['gt_boxes3d'], data['npoints']
+        self.data['sample_id'], self.data['pts_rect'], self.data['pts_intensity'], self.data['gt_boxes3d'], self.data['npoints']
+
+        # TODO try to access this with calib function
+        if self.use_masked:
+            # use masked/sampled pts if True
+            pts_rect = calib.lidar_to_rect(masked_pts[:, 0:3])
+            pts_intensity = masked_pts[:, 3]
+            npoints = masked_pts.shape[0]
 
         inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float().view(1, -1, 3)
         gt_boxes3d = torch.from_numpy(gt_boxes3d).cuda(non_blocking=True)

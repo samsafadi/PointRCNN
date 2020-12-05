@@ -1,12 +1,20 @@
+
+
+
 """
-python3 sparsify.py --calib_path  '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/calib/'\
+modified from sparsify.py file. This file gnerate angle map of [H=64,W=1024,4] from velodyne lidar bins 
+
+
+To run this: 
+python3 pts2angmap.py --calib_path  '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/calib/'\
     --image_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/image_2/' --ptc_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/velodyne/'\
-    --split_file '/root/gdrive/My Drive/PointRCNN/data/KITTI/ImageSets/train.txt' --output_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/sparsified/' --W 1024 --slice 1 --H 64 
+    --split_file '/root/gdrive/My Drive/PointRCNN/data/KITTI/ImageSets/train.txt' --output_path '/root/gdrive/My Drive/PointRCNN/data/KITTI/object/training/angle_map/' --W 1024 --slice 1 --H 64 
 
 git config --global user.email "zhaoguangyuan@ucla.edu"
 git config --global user.name "zhaoguangyuan123"
 
 """
+
 
 import argparse
 import os.path as osp
@@ -35,7 +43,7 @@ def pto_ang_map(data_idx, velo_points, H=64, W=512, slice=1, line_spec=None,
 
     x, y, z, i = velo_points[:, 0], velo_points[:,
                                                 1], velo_points[:, 2], velo_points[:, 3]
-    print('velo_points', velo_points[:4])
+    # print('velo_points', velo_points[:4])
     d = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     r = np.sqrt(x ** 2 + y ** 2)
     d[d == 0] = 0.000001
@@ -47,8 +55,8 @@ def pto_ang_map(data_idx, velo_points, H=64, W=512, slice=1, line_spec=None,
 
     theta = np.radians(2.) - np.arcsin(z / d)
     theta_ = (theta / dtheta).astype(int)
-    print('theta_', theta_.shape)
-    print('theta_', theta_[:100])
+    # print('theta_', theta_.shape)
+    # print('theta_', theta_[:100])
 
     theta_[theta_ < 0] = 0
     theta_[theta_ >= H] = H - 1
@@ -72,38 +80,32 @@ def pto_ang_map(data_idx, velo_points, H=64, W=512, slice=1, line_spec=None,
     if get_lines:
         depth_map_lines = depth_map.copy()
 
-    print('depth_map', depth_map.shape)
+    # print('depth_map', depth_map.shape)
 
-    # imageio.imwrite(depth_dir + '/' + data_idx+'.png', depth_map)
-    np.save(args.output_path + str(data_idx)+ '.npy', depth_map)
+    # # imageio.imwrite(depth_dir + '/' + data_idx+'.png', depth_map)
+    # np.save(args.output_path + str(data_idx)+ '.npy', depth_map)
 
-    print(args.output_path + '/' + str(data_idx)+ '.npy')
-    print('Finish Depth Map {}'.format(data_idx))
+    # print(args.output_path + '/' + str(data_idx)+ '.npy')
+    # print('Finish Depth Map {}'.format(data_idx))
 
-    depth_map = depth_map.reshape((-1, 4))
-    depth_map = depth_map[depth_map[:, 0] != -1.0]
-
-    print('depth_map', depth_map.shape)
-    if get_lines:
-        return depth_map_lines, depth_map
-    else:
-        return depth_map
+    return depth_map
 
 
 def gen_sparse_points(data_idx, args):
-    print('check point')
 
     calib = Calibration(
         osp.join(args.calib_path, "{:06d}.txt".format(data_idx)))
     
     pc_velo = load_velo_scan(
         osp.join(args.ptc_path, "{:06d}.bin".format(data_idx)))
-    print('pc_velo', pc_velo.shape)
+
+
+    # print('pc_velo', pc_velo.shape)
 
     img = load_image(osp.join(args.image_path, "{:06d}.png".format(data_idx)))
     img_height, img_width, img_channel = img.shape
 
-    print('img', img.shape)
+    # print('img', img.shape)
 
     _, _, valid_inds_fov = get_lidar_in_image_fov(
         pc_velo[:, :3], calib, 0, 0, img_width, img_height, True)
@@ -118,7 +120,7 @@ def gen_sparse_points(data_idx, args):
     pc_velo = pc_velo[valid_inds]
 
 
-    print('pc_velo', pc_velo.shape)
+    # print('pc_velo', pc_velo.shape)
 
     if args.fill_in_map_dir is not None and (args.fill_in_spec is not None or args.fill_in_slice is not None):
         fill_in_line = np.load(os.path.join(
@@ -135,20 +137,27 @@ def gen_sparse_points(data_idx, args):
                          "{:06d}".format(data_idx)), depth_map_lines)
         return ptc
     else:
-        return pto_ang_map(data_idx, pc_velo, H=args.H, W=args.W, slice=args.slice,
+        depth_map = pto_ang_map(data_idx, pc_velo, H=args.H, W=args.W, slice=args.slice,
                            line_spec=args.line_spec, get_lines=False,
                            fill_in_line=fill_in_line, fill_in_spec=args.fill_in_spec,
                            fill_in_slice=args.fill_in_slice)
 
+        # should save a 3D array in size (H, M, 4) 
+        np.save(osp.join(args.output_path,
+                        "{:06d}".format(data_idx)), depth_map)
+
+        return depth_map
+
+
 
 def sparse_and_save(args, data_idx):
     sparse_points = gen_sparse_points(data_idx, args)
-    print('sparse_points', sparse_points.shape)
-    sparse_points = sparse_points.astype(np.float32)
-    sparse_points.tofile(args.output_path + '/' + '%06d.bin' % (data_idx))
+    # print('sparse_points', sparse_points.shape)
+    # sparse_points = sparse_points.astype(np.float32)
+    # sparse_points.tofile(args.output_path + '/' + '%06d.bin' % (data_idx))
+    print('Finish angle Map {:06d}'.format(data_idx))
 
-    print('error')
-
+    # print('error')
 
 def gen_sparse_points_all(args):
     with open(args.split_file) as f:
@@ -167,6 +176,7 @@ def gen_sparse_points_all(args):
 
     def update(*a):
         pbar.update()
+
     i = 0 
     for data_idx in data_idx_list:
         # res.append((data_idx, pool.apply_async(
@@ -174,15 +184,16 @@ def gen_sparse_points_all(args):
         #     callback=update)))
         sparse_and_save(args, data_idx)
 
-        i = i+1 
-        print( 'i=', i)
-        if i >1:
-            break
+
+        # break
 
     pool.close()
     pool.join()
     pbar.clear(nolock=False)
     pbar.close()
+
+
+
 
 
 if __name__ == '__main__':
@@ -197,7 +208,7 @@ if __name__ == '__main__':
                         help='path to sparsed point cloud files')
     parser.add_argument('--slice', default=1, type=int)
     parser.add_argument('--H', default=64, type=int)
-    parser.add_argument('--W', default=512, type=int)
+    parser.add_argument('--W', default=1024, type=int)
     parser.add_argument('--D', default=700, type=int)
     parser.add_argument('--store_line_map_dir', type=str, default=None)
     parser.add_argument('--line_spec', type=int, nargs='+', default=None)
