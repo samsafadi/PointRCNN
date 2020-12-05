@@ -36,7 +36,7 @@ __C.RPN = edict()
 __C.RPN.ENABLED = True
 __C.RPN.FIXED = False
 
-__C.RPN.USE_INTENSITY = True
+__C.RPN.USE_INTENSITY = False
 
 # config of bin-based loss
 __C.RPN.LOC_XZ_FINE = False
@@ -78,7 +78,7 @@ __C.RPN.SCORE_THRESH = 0.3
 
 # 2. config of rcnn network
 __C.RCNN = edict()
-__C.RCNN.ENABLED = False
+__C.RCNN.ENABLED = True
 
 # config of input
 __C.RCNN.USE_RPN_FEATURES = True

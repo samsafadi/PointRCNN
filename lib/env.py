@@ -47,7 +47,6 @@ def load_part_ckpt(model, filename, logger, total_keys=-1):
 
         update_model_state = {key: val for key, val in model_state.items() if key in model.state_dict()}
         state_dict = model.state_dict()
-        print(state_dict)
         state_dict.update(update_model_state)
         model.load_state_dict(state_dict)
 
@@ -102,7 +101,10 @@ class PointRCNNEnv():
         # load config
         config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
         config = load_config(config_path)
-        print(cfg)
+        # print(cfg)
+
+        root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
+        ckpt_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG, 'ckpt')
 
         # create logger
         logger = create_logger(os.path.join(OUTPUT_DIR, 'log_pg.txt'))
@@ -110,6 +112,8 @@ class PointRCNNEnv():
         for key, val in config.items():
             logger.info("{:16} {}".format(key, val))
         save_config_to_file(cfg, logger=logger)
+
+        print(cfg.RCNN.ENABLED, cfg.RPN.ENABLED)
         
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(config, logger)
