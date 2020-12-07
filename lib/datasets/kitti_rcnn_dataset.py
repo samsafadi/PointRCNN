@@ -137,6 +137,9 @@ class KittiRCNNDataset(KittiDataset):
     def get_road_plane(self, idx):
         return super().get_road_plane(idx % 10000)
 
+    def get_angle_map(self, idx):
+        return np.load(os.path.join(self.angle_dir, '%06d.npy' % idx))
+    
     @staticmethod
     def get_rpn_features(rpn_feature_dir, idx):
         rpn_feature_file = os.path.join(rpn_feature_dir, '%06d.npy' % idx)
@@ -394,7 +397,7 @@ class KittiRCNNDataset(KittiDataset):
 
         pts_intensity = pts_intensity.reshape(len(pts_intensity), 1)
 
-        angle_map = np.load(os.path.join('../../data/KITTI/object/training/angle_map', "{:06d}.npy".format(sample_id)))
+        angle_map = self.get_angle_map(sample_id)
 
         image = self.get_image(sample_id)
 

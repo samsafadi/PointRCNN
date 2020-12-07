@@ -21,6 +21,7 @@ class KittiDataset(torch_data.Dataset):
         self.calib_dir = os.path.join(self.imageset_dir, 'calib')
         self.label_dir = os.path.join(self.imageset_dir, 'label_2')
         self.plane_dir = os.path.join(self.imageset_dir, 'planes')
+        self.angle_dir = os.path.join(self.imageset_dir, 'angle_map')
 
     def get_image(self, idx):
         # assert False, 'DO NOT USE cv2 NOW, AVOID DEADLOCK'
