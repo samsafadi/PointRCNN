@@ -23,5 +23,6 @@
   "start_epoch": 0,
   "rcnn_eval_roi_dir": null,
   "rcnn_eval_feature_dir": null,
+  "angle_map_dir": "data/KITTI/object/training/angle_map/",
   "set": "RPN.LOC_XZ_FINE False" 
 }

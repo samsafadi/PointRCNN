@@ -394,11 +394,14 @@ class KittiRCNNDataset(KittiDataset):
 
         pts_intensity = pts_intensity.reshape(len(pts_intensity), 1)
 
+        angle_map = np.load(os.path.join('../../data/KITTI/object/training/angle_map', "{:06d}.npy".format(sample_id)))
+
         image = self.get_image(sample_id)
 
         sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
                         'pts_rect': pts_rect, 'pts_intensity': pts_intensity,
-                        'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints, 'image': image}
+                        'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints, 'image': image,
+                        'angle_map': angle_map}
         return sample_info
 
     @staticmethod

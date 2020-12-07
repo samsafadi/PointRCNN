@@ -101,7 +101,7 @@ class PointRCNNEnv():
         
         # load config
         config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
-        config = load_config(config_path)
+        self.config = load_config(config_path)
 
         root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
         ckpt_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG, 'ckpt')
@@ -109,19 +109,21 @@ class PointRCNNEnv():
         # create logger
         logger = create_logger(os.path.join(OUTPUT_DIR, 'log_pg.txt'))
         logger.info('**********************Start logging**********************')
-        for key, val in config.items():
+        for key, val in self.config.items():
             logger.info("{:16} {}".format(key, val))
         save_config_to_file(cfg, logger=logger)
 
         # create PointRCNN dataloader & network
-        self.test_loader = create_dataloader(config, logger)
+        self.test_loader = create_dataloader(self.config, logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
         self.model.cuda()
         self.model.eval()
 
         self.use_masked = use_masked
         # load checkpoint
-        load_ckpt_based_on_cfg(config, self.model, logger)
+        load_ckpt_based_on_cfg(self.config, self.model, logger)
+
+        self.data = None
 
     # def _batch_detector(self, batch_pts):
     #     """ Input a single or batch sample of point clouds, output prediction result
@@ -186,10 +188,10 @@ class PointRCNNEnv():
 
         # load ang_depth_map from dir
         ang_depth_map = np.load(os.path.join(
-            args.angle_map_dir, "{:06d}.npy".format(self.data['sample_id'])))  # (H,W,4)
+            self.config.angle_map_dir, "{:06d}.npy".format(self.data['sample_id'])))  # (H,W,4)
 
         # expand mask 2d->3d to enable broadcast
-        mask = np.expand_dims(mask, axis=2)
+        mask = np.expand_dims(scanning_mask, axis=2)
     
         masked_ang_depth_map = mask*ang_depth_map
 
@@ -213,6 +215,7 @@ class PointRCNNEnv():
         self.data['sample_id'], self.data['pts_rect'], self.data['pts_intensity'], self.data['gt_boxes3d'], self.data['npoints']
 
         # TODO try to access this with calib function
+        calib = self.test_loader.dataset.get_calib(sample_id)
         if self.use_masked:
             # use masked/sampled pts if True
             pts_rect = calib.lidar_to_rect(masked_pts[:, 0:3])
@@ -221,7 +224,6 @@ class PointRCNNEnv():
 
         inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float().view(1, -1, 3)
         gt_boxes3d = torch.from_numpy(gt_boxes3d).cuda(non_blocking=True)
-        print(gt_boxes3d.shape)
         input_data = {'pts_input': inputs}
 
         # model inference
@@ -330,7 +332,6 @@ class PointRCNNEnv():
             anno['truncated'], anno['occluded'] = -1, -1
 
             # Get image boxes
-            calib = self.test_loader.dataset.get_calib(sample_id)
             corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
             img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
             anno['bbox'] = img_boxes[k, 0:3]
