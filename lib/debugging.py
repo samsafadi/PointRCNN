@@ -6,11 +6,13 @@ from env import PointRCNNEnv
 my_env = PointRCNNEnv()
 
 loader = my_env.test_loader
-data = loader.dataset.__getitem__(0)
+my_env.reset()
+data = my_env.data
 
 angle_map = data['angle_map']
 
-print(angle_map[32, 512, :])
+# create random mask of zeros and ones
+mask = np.random.randint(2, size=(angle_map.shape[1], angle_map.shape[2]))
+lidar_points = my_env._get_pts_from_mask(mask)
 
-my_env.reset()
-my_env._eval_data(angle_map)
+my_env._eval_data(lidar_points)
