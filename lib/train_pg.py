@@ -1,13 +1,17 @@
+import _init_path
 import torch
 import tqdm
 import json
 import sys
+import os
 
 sys.path.append('../')
 
 import argparse
 from lib.env import PointRCNNEnv
 from lib.pg_agent import PG
+
+HOME_DIR = os.path.join(os.getcwd(), '..')
 
 def train(agent, env, config, device):
     """
@@ -29,15 +33,18 @@ def train(agent, env, config, device):
         while True:
             # Save state
             batch_obs.append(state.copy())
+            s = state.shape
+            state = state.reshape(s[0], s[3], s[1], s[2])
+            state = torch.Tensor(state).cuda()
 
             # get the agent action for this state
             act, prob_action, log_prob_action, _ = agent.get_action(state)
 
             # get reward
-            obs, batch_reward, done, _ = env.step(act)
+            obs, reward, done, _ = env.step(act.view(act.shape[1:]))
 
             # calculates loss against baseline and steps optimizer
-            batch_loss = agent.update(batch_obs, batch_acts, batch_rets)
+            batch_loss = agent.update(obs, act, reward)
 
             batch_obs.append(obs)
             batch_acts.append(act)
@@ -79,7 +86,7 @@ if __name__ == "__main__":
         device = torch.device('cpu')
         print('Running on CPU')
 
-    config_path = '/pg.json'
+    config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
     config = load_config(config_path)
     debug = True
 
@@ -89,5 +96,5 @@ if __name__ == "__main__":
     # initialize the agent along with the networks inside it
     agent = PG(config, env=env)
 
-    for i in range(epochs):
+    for i in range(args.num_epochs):
         train(agent, env, config, device)

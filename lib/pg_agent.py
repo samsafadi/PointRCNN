@@ -8,7 +8,7 @@ from torch.optim import Adam
 import torch.nn.functional as F
 import numpy as np
 from torch.distributions import Bernoulli
-from UNet_model import UNet
+from unet_model import UNet
 from torch.autograd import Variable
 
 # setting device on GPU if available, else CPU
@@ -18,6 +18,7 @@ class PG(object):
     def __init__(self, configs, env):
         self.configs = configs
         self.env = env
+        self.action_size = (64, 1024)
 
         # n_channels=3 for RGB images
         # n_classes is the number of probabilities you want to get per pixel
@@ -30,20 +31,23 @@ class PG(object):
          
         self.actor = UNet(n_channels=3, n_classes=1, bilinear=True) # [B,C, H_in=372, W_in=1242] -> [B, C, H_out=64, W_out=1024]
         self.optimizer = Adam(self.actor.parameters(), lr=configs['lr'])
+        self.actor.to(device)
 
 
     def get_action(self, state, deterministic=False):
         """Given the state, produces an action, the probability of the action, the log probability of the action, and
         the argmax action"""
         action_probabilities = self.actor(state)  # output size should be [B*H*W]
-        action_probabilities = F.sigmoid(action_probabilities) # make sure the probs are in range [0,1]
+        action_probabilities = torch.sigmoid(action_probabilities) # make sure the probs are in range [0,1]
 
-        B, _, _ = action_probabilities.shape
-        action_probabilities = action_probabilities.view(B, -1)
+        # B, _, _, _ = action_probabilities.shape
+        action_probabilities = action_probabilities[:, :, :self.action_size[0], :self.action_size[1]]
+        action_probabilities = torch.squeeze(action_probabilities, 1)
+        # assert action_probabilities.size()[1, 2] == self.action_size, "Actor output the wrong size"
+        # action_probabilities_flat = action_probabilities.contiguous().view(B, -1)
         # TODO leave this to future process; seems it will get the index
         max_probability_action = torch.argmax(action_probabilities, dim=-1)
 
-        assert action_probabilities.size()[1, 2] == self.action_size, "Actor output the wrong size"
         if deterministic:
             # using deteministic policy during test time
             action = action_probabilities(action_probabilities>0.5).cpu()
@@ -84,10 +88,3 @@ class PG(object):
         batch_loss.backward()
         self.optimizer.step()
         return batch_loss
-        
-
-
-
-
-        
-    

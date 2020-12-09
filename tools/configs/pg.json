@@ -12,7 +12,6 @@
   "eval_mode": "rcnn",
   "cfg_file": "cfgs/default.yml",
   "eval_all": false,
-  "test": false,
   "rpn_ckpt": null,
   "rcnn_ckpt": null,
   "extra_tag": "default",
@@ -21,8 +20,7 @@
   "save_result": false,
   "save_rpn_feature": false,
   "start_epoch": 0,
-  "rcnn_eval_roi_dir": null,
-  "rcnn_eval_feature_dir": null,
   "angle_map_dir": "data/KITTI/object/training/angle_map/",
-  "set": "RPN.LOC_XZ_FINE False" 
+  "set": "RPN.LOC_XZ_FINE False" ,
+  "lr": 1e-4
 }
