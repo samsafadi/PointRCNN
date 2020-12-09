@@ -63,7 +63,7 @@ class PG(object):
     def compute_loss(self, obs, act, rew):
         """make loss function whose gradient, for the right data, is policy gradient"""
         # TODO we may do not need to calculate it for the second time. 
-        _, _, logp, _ = self.get_action(obs, deterministic=True)
+        act_baseline, _, logp, _ = self.get_action(obs, deterministic=True)
 
         # advantage
         _, rew_baseline, _, _ = self.env.step(act_baseline, obs=obs)

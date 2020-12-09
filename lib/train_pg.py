@@ -20,36 +20,42 @@ def train(agent, env, config, device):
     batch_lens = []
 
     # Starting state, reward, and trajectories
-    state, done = env.reset(), False
-    ep_rews = []
+    for _ in tqdm.tqdm(range(len(env.test_loader))):
+        # loads a new state (image)
+        state, done = env.reset(), False
 
-    while True:
-        # Save state
-        batch_obs.append(state.copy())
+        ep_rews = []
 
-        # get the agent action for this state
-        act, _, log_prob_action, _ = agent.get_action(state)
+        while True:
+            # Save state
+            batch_obs.append(state.copy())
 
-        with torch.no_grad():
-            state, reward, done, _ = env.step(act)
+            # get the agent action for this state
+            act, prob_action, log_prob_action, _ = agent.get_action(state)
 
-        batch_acts.append(act)
-        ep_rews.append(reward)
+            # get reward
+            obs, batch_reward, done, _ = env.step(act)
 
-        if done:
-            # Record info about episode
-            ep_ret, ep_len = sum(ep_rews), len(ep_rews)
-            batch_rets.append(ep_ret)
-            batch_lens.append(ep_len)
+            # calculates loss against baseline and steps optimizer
+            batch_loss = agent.update(batch_obs, batch_acts, batch_rets)
 
-            # reset episode-specific variables
-            state, done, ep_rews = env.reset(), False, []
+            batch_obs.append(obs)
+            batch_acts.append(act)
+            ep_rews.append(batch_reward)
 
-            # end experience loop if we have enough of it
-            if len(batch_obs) > config['batchsize']:
-                break
+            if done:
+                # Record info about episode
+                ep_ret, ep_len = sum(ep_rews), len(ep_rews)
+                batch_rets.append(ep_ret)
+                batch_lens.append(ep_len)
 
-    batch_loss = agent.update(batch_obs, batch_acts, batch_rets)
+                # reset episode-specific variables
+                state, done, ep_rews = env.reset(), False, []
+
+                # end experience loop if we have enough of it
+                if len(batch_obs) > config['batchsize']:
+                    break
+
     return batch_loss, batch_rets, batch_lens
 
 
@@ -62,7 +68,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arg parser")
     
     parser.add_argument("--eval_mode", type=str, default='rpn', required=True, help="specify the evaluation mode")
-
+    parser.add_argument("--num_epochs", type=int, default=10, required=False, help="specify the number of epochs")
 
     args = parser.parse_args()
 
@@ -82,4 +88,6 @@ if __name__ == "__main__":
 
     # initialize the agent along with the networks inside it
     agent = PG(config, env=env)
-    train(agent, env, config, device)
+
+    for i in range(epochs):
+        train(agent, env, config, device)

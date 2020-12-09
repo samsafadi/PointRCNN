@@ -240,11 +240,17 @@ class PointRCNNEnv():
             # say batch size is one for now
             pred_score = roi_scores_raw[0]
 
+            # print(pred_score)
+
             # set batch size to one for now
             batch_size = 1
 
             rcnn_cls = ret_dict['rcnn_cls'].view(batch_size, -1, ret_dict['rcnn_cls'].shape[1])
             rcnn_reg = ret_dict['rcnn_reg'].view(batch_size, -1, ret_dict['rcnn_reg'].shape[1])  # (B, M, C)
+
+            # print(rcnn_cls)
+            norm_scores = torch.sigmoid(rcnn_cls)
+            print(norm_scores[norm_scores > 0.7])
 
             # bounding box regression
             anchor_size = MEAN_SIZE
@@ -448,8 +454,8 @@ class PointRCNNEnv():
             min_overlaps = min_overlaps[:, :, current_classes]
 
             # return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
-            print(label_annos)
-            print(pred_annos)
+            # print(label_annos)
+            # print(pred_annos)
             difficultys = [1]
             ret = eval_class(label_annos, pred_annos, current_classes, difficultys, 0, min_overlaps, num_parts=1)
             print(ret)
