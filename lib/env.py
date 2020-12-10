@@ -248,6 +248,9 @@ class PointRCNNEnv():
 
             norm_scores = torch.sigmoid(rcnn_cls)
 
+            # remove low confidence scores
+            thresh_mask = norm_scores > cfg.RCNN.SCORE_THRESH
+
             # bounding box regression
             anchor_size = MEAN_SIZE
 
@@ -259,6 +262,24 @@ class PointRCNNEnv():
                                               get_xz_fine=True, get_y_by_bin=cfg.RCNN.LOC_Y_BY_BIN,
                                               loc_y_scope=cfg.RCNN.LOC_Y_SCOPE, loc_y_bin_size=cfg.RCNN.LOC_Y_BIN_SIZE,
                                               get_ry_fine=True).view(batch_size, -1, 7)
+
+            # select boxes
+            pred_boxes3d_selected = pred_boxes3d[0, thresh_mask.view(-1)]
+            raw_scores_selected = pred_score[thresh_mask.view(-1)]
+            norm_scores_selected = norm_scores[0, thresh_mask.view(-1)]
+
+            # print(pred_boxes3d_selected, '\n', norm_scores_selected)
+            # print('-----')
+
+            # rotated NMS
+            boxes_bev_selected = kitti_utils.boxes3d_to_bev_torch(pred_boxes3d_selected)
+            keep_idx = iou3d_utils.nms_gpu(boxes_bev_selected, raw_scores_selected, cfg.RCNN.NMS_THRESH).view(-1)
+            pred_boxes3d_selected = pred_boxes3d_selected[keep_idx]
+            scores_selected = raw_scores_selected[keep_idx]
+            norm_scores_selected = norm_scores_selected[keep_idx]
+            pred_boxes3d_selected, scores_selected = pred_boxes3d_selected, scores_selected
+
+            # print(pred_boxes3d_selected, '\n', norm_scores_selected)
 
             # Intersect over union
             iou3d = iou3d_utils.boxes_iou3d_gpu(pred_boxes3d[0], torch.squeeze(gt_boxes3d))
@@ -357,65 +378,6 @@ class PointRCNNEnv():
 
             pred_annos = [pred_annos]
         
-            # for k, bbox3d in enumerate(pred_boxes3d_np):
-            #     bbox3d = np.expand_dims(bbox3d, axis=0)
-
-            #     anno['name'].append(cfg.CLASSES)
-            #     anno['truncated'].append(-1)
-            #     anno['occluded'].append(-1)
-
-            #     # Get image boxes
-            #     corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
-            #     img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
-            #     anno['bbox'].append(img_boxes)
-
-            #     x, z, ry = bbox3d[0, 0], bbox3d[0, 2], bbox3d[0, 6]
-            #     beta = np.arctan2(z, x)
-            #     alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-
-            #     anno['alpha'] = np.array([alpha])
-            #     # dimensions will convert hwl format to standard lhw(camera) format.
-            #     anno['dimensions'] = np.expand_dims(np.array([bbox3d[0, 5], bbox3d[0, 3], bbox3d[0, 4]]), axis=0)
-            #     anno['location'] = np.expand_dims(bbox3d[0, 0:3], axis=0)
-            #     anno['rotation_y'] = np.expand_dims(np.array([bbox3d[0, 6]]), axis=0)
-            #     anno['score'] = np.array([pred_score[k]])
-            #     pred_annos.append(anno)
-
-            # label_annos = []
-            # for k, bbox3d in enumerate(gt_boxes3d_np):
-            #     anno = {}
-            #     anno.update({
-            #         'name': [],
-            #         'truncated': [],
-            #         'occluded': [],
-            #         'alpha': [],
-            #         'bbox': [],
-            #         'dimensions': [],
-            #         'location': [],
-            #         'rotation_y': []
-            #     })
-
-            #     bbox3d = np.expand_dims(bbox3d, axis=0)
-
-            #     anno['name'] = np.array(cfg.CLASSES)
-            #     anno['truncated'], anno['occluded'] = np.array([-1]), np.array([-1])
-
-            #     # Get image boxes
-            #     calib = self.test_loader.dataset.get_calib(sample_id)
-            #     corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
-            #     img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
-            #     anno['bbox'] = np.expand_dims(img_boxes[0, 0:3], axis=0)
-
-            #     x, z, ry = bbox3d[0, 0], bbox3d[0, 2], bbox3d[0, 6]
-            #     beta = np.arctan2(z, x)
-            #     alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-
-            #     anno['alpha'] = np.array([alpha])
-            #     # dimensions will convert hwl format to standard lhw(camera) format.
-            #     anno['dimensions'] = np.expand_dims(np.array([bbox3d[0, 5], bbox3d[0, 3], bbox3d[0, 4]]), axis=0)
-            #     anno['location'] = np.expand_dims(bbox3d[0, 0:3], axis=0)
-            #     anno['rotation_y'] = np.expand_dims(np.array([bbox3d[0, 6]]), axis=0)
-            #     label_annos.append(anno)
 
             label_anno = kitti.get_label_anno(os.path.join(self.label_root, '%06d.txt' % sample_id))
             label_annos = [label_anno]
