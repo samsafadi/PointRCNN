@@ -1,11 +1,6 @@
 
 
 """env file for interacting with data loader and PointRCNN detector
-
-TODO list
-    - [ ] Enabling loading image in the KITTI dataloader, currently seems it only return pts 
-    - [ ] connect this env with KITTI dataloader and detector 
-    - [ ] add a script for projecting point cloud onto XY plane for sampling purpose
 """
 
 import os
