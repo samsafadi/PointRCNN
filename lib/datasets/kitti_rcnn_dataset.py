@@ -1160,6 +1160,7 @@ class KittiRCNNDataset(KittiDataset):
                     (cfg.RCNN.ENABLED and cfg.RCNN.ROI_SAMPLE_JIT and key in ['gt_boxes3d', 'roi_boxes3d']):
                 max_gt = 0
                 for k in range(batch_size):
+                    # print(batch[k][key].__len__())
                     max_gt = max(max_gt, batch[k][key].__len__())
                 batch_gt_boxes3d = np.zeros((batch_size, max_gt, 7), dtype=np.float32)
                 for i in range(batch_size):
@@ -1171,8 +1172,20 @@ class KittiRCNNDataset(KittiDataset):
                 if batch_size == 1:
                     ans_dict[key] = batch[0][key][np.newaxis, ...]
                 else:
-                    ans_dict[key] = np.concatenate([batch[k][key][np.newaxis, ...] for k in range(batch_size)], axis=0)
+                    def pad_with_vals(arr, val, to_len, axis):
+                        assert to_len >= arr.shape[axis], 'arr is longer than to_len'
+                        if to_len == len(arr):
+                            return arr
+                        shape = list(arr.shape)
+                        shape[axis] = to_len - arr.shape[axis]
+                        pad = np.full(shape, val)
+                        return np.concatenate((arr, pad), axis=axis)
 
+
+                    # ans_dict[key] = np.concatenate([batch[k][key][np.newaxis, ...] for k in range(batch_size)], axis=0)
+                    arrays = [batch[k][key][np.newaxis, ...] for k in range(batch_size)]
+                    max_len = max(arrays, key=lambda x: x.shape[1]).shape[1]
+                    ans_dict[key] = np.concatenate([pad_with_vals(arr, -1, max_len, 1) for arr in arrays], axis=0)
             else:
                 ans_dict[key] = [batch[k][key] for k in range(batch_size)]
                 if isinstance(batch[0][key], int):
