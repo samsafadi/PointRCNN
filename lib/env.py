@@ -18,7 +18,7 @@ import lib.utils.iou3d.iou3d_utils as iou3d_utils
 from torch.utils.data import DataLoader
 from lib.net.point_rcnn import PointRCNN
 import tools.train_utils.train_utils as train_utils
-from tools.kitti_object_eval_python.eval import get_official_eval_result, eval_class
+from tools.kitti_object_eval_python.eval import get_official_eval_result, eval_class, get_mAP
 from lib.config import cfg, cfg_from_file, save_config_to_file, cfg_from_list
 from tools.kitti_object_eval_python import kitti_common as kitti
 
@@ -325,76 +325,85 @@ class PointRCNNEnv():
             # pred_boxes3d_np = np.squeeze(pred_boxes3d.cpu().numpy(), axis=0)
             # gt_boxes3d_np = np.squeeze(gt_boxes3d.cpu().numpy(), axis=0)
 
-            # pred_annos = {}
-            # pred_annos.update({
-            #     'name': [],
-            #     'truncated': [],
-            #     'occluded': [],
-            #     'alpha': [],
-            #     'bbox': [],
-            #     'dimensions': [],
-            #     'location': [],
-            #     'rotation_y': []
-            # })
+            pred_annos = []
+            for k in range(batch_size):
+                anno = {}
+                anno.update({
+                    'name': [],
+                    'truncated': [],
+                    'occluded': [],
+                    'alpha': [],
+                    'bbox': [],
+                    'dimensions': [],
+                    'location': [],
+                    'rotation_y': []
+                })
 
-            # pred_annos['name'] = np.array([cfg.CLASSES for _ in range(len(pred_boxes3d_np))])
-            # pred_annos['truncated'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
-            # pred_annos['occluded'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
+                pred_boxes3d_np = pred_boxes3d_selected[k].cpu().numpy()
+                gt_boxes3d_np = gt_boxes3d[k].cpu().numpy()
+                calib_cur = calib[k]
 
-            # # Get image boxes
-            # corners3d = kitti_utils.boxes3d_to_corners3d(pred_boxes3d_np)
-            # img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
-            # pred_annos['bbox'] = img_boxes
+                print(pred_boxes3d_np.shape, gt_boxes3d_np.shape)
 
-            # x, z, ry = pred_boxes3d_np[:, 0], pred_boxes3d_np[:, 2], pred_boxes3d_np[:, 6]
-            # beta = np.arctan2(z, x)
-            # alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-            
-            # pred_annos['alpha'] = alpha
-            # # reorder to convert hwl format to standard lhw(camera) format.
-            # pred_annos['dimensions'] = pred_boxes3d_np[:, 3:6][:, [2, 0, 1]]
-            # pred_annos['location'] = pred_boxes3d_np[:, 0:3]
-            # pred_annos['rotation_y'] = pred_boxes3d_np[:, 6]
-            # pred_annos['score'] = pred_score.cpu().numpy()
+                anno['name'] = np.array([cfg.CLASSES for _ in range(len(pred_boxes3d_np))])
+                anno['truncated'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
+                anno['occluded'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
 
-            # pred_annos = [pred_annos]
+                # Get image boxes
+                corners3d = kitti_utils.boxes3d_to_corners3d(pred_boxes3d_np)
+                img_boxes, _ = calib_cur.corners3d_to_img_boxes(corners3d)
+                anno['bbox'] = img_boxes
+
+                x, z, ry = pred_boxes3d_np[:, 0], pred_boxes3d_np[:, 2], pred_boxes3d_np[:, 6]
+                beta = np.arctan2(z, x)
+                alpha = -np.sign(beta) * np.pi / 2 + beta + ry
+                
+                anno['alpha'] = alpha
+                # reorder to convert hwl format to standard lhw(camera) format.
+                anno['dimensions'] = pred_boxes3d_np[:, 3:6][:, [2, 0, 1]]
+                anno['location'] = pred_boxes3d_np[:, 0:3]
+                anno['rotation_y'] = pred_boxes3d_np[:, 6]
+                anno['score'] = scores_selected[k].cpu().numpy()
+
+                pred_annos.append(anno)
         
+            # print(pred_annos)
+            label_annos = [kitti.get_label_anno(os.path.join(self.label_root, '%06d.txt' % idx)) for idx in sample_id]
+            # print(label_annos)
 
-            # label_anno = kitti.get_label_anno(os.path.join(self.label_root, '%06d.txt' % sample_id))
-            # label_annos = [label_anno]
+            # 0 means car
+            current_classes = [0]
 
-            # # 0 means car
-            # current_classes = [0]
+            overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
+                                     0.5], [0.7, 0.5, 0.5, 0.7, 0.5],
+                                    [0.7, 0.5, 0.5, 0.7, 0.5]])
+            overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
+                                     0.5], [0.5, 0.25, 0.25, 0.5, 0.25],
+                                    [0.5, 0.25, 0.25, 0.5, 0.25]])
+            min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
+            class_to_name = {
+                0: 'Car',
+                1: 'Pedestrian',
+                2: 'Cyclist',
+                3: 'Van',
+                4: 'Person_sitting',
+            }
+            name_to_class = {v: n for n, v in class_to_name.items()}
+            if not isinstance(current_classes, (list, tuple)):
+                current_classes = [current_classes]
+            current_classes_int = []
+            for curcls in current_classes:
+                if isinstance(curcls, str):
+                    current_classes_int.append(name_to_class[curcls])
+                else:
+                    current_classes_int.append(curcls)
+            current_classes = current_classes_int
+            min_overlaps = min_overlaps[:, :, current_classes]
 
-            # overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
-            #                          0.5], [0.7, 0.5, 0.5, 0.7, 0.5],
-            #                         [0.7, 0.5, 0.5, 0.7, 0.5]])
-            # overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
-            #                          0.5], [0.5, 0.25, 0.25, 0.5, 0.25],
-            #                         [0.5, 0.25, 0.25, 0.5, 0.25]])
-            # min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
-            # class_to_name = {
-            #     0: 'Car',
-            #     1: 'Pedestrian',
-            #     2: 'Cyclist',
-            #     3: 'Van',
-            #     4: 'Person_sitting',
-            # }
-            # name_to_class = {v: n for n, v in class_to_name.items()}
-            # if not isinstance(current_classes, (list, tuple)):
-            #     current_classes = [current_classes]
-            # current_classes_int = []
-            # for curcls in current_classes:
-            #     if isinstance(curcls, str):
-            #         current_classes_int.append(name_to_class[curcls])
-            #     else:
-            #         current_classes_int.append(curcls)
-            # current_classes = current_classes_int
-            # min_overlaps = min_overlaps[:, :, current_classes]
-
-            # # return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
-            # # print(label_annos)
-            # # print(pred_annos)
-            # difficultys = [1]
-            # ret = eval_class(label_annos, pred_annos, current_classes, difficultys, 0, min_overlaps, num_parts=1)
-            # # print(ret)
+            # return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
+            # print(label_annos)
+            # print(pred_annos)
+            difficultys = [1]
+            ret = eval_class(label_annos, pred_annos, current_classes, difficultys, 0, min_overlaps, num_parts=1)
+            print(get_mAP(ret['precision']))
+            return get_mAP(ret['precision'])

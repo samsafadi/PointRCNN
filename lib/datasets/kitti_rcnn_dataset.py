@@ -400,6 +400,7 @@ class KittiRCNNDataset(KittiDataset):
         angle_map = self.get_angle_map(sample_id)
 
         image = self.get_image(sample_id)
+        print(image.shape)
 
         sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
                         'pts_rect': pts_rect, 'pts_intensity': pts_intensity,
@@ -1178,6 +1179,7 @@ class KittiRCNNDataset(KittiDataset):
                             return arr
                         shape = list(arr.shape)
                         shape[axis] = to_len - arr.shape[axis]
+                        # print(to_len, arr.shape, shape[axis])
                         pad = np.full(shape, val)
                         return np.concatenate((arr, pad), axis=axis)
 
