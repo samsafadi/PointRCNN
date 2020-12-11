@@ -229,10 +229,7 @@ class PointRCNNEnv():
 
             roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
             roi_boxes3d = ret_dict['rois']  # (B, M, 7)
-            seg_result = ret_dict['seg_result'].long()  # (B, N)
-
-            # say batch size is one for now
-            pred_score = roi_scores_raw[:]
+            # seg_result = ret_dict['seg_result'].long()  # (B, N)
 
             rcnn_cls = ret_dict['rcnn_cls'].view(batch_size, -1, ret_dict['rcnn_cls'].shape[1])
             rcnn_reg = ret_dict['rcnn_reg'].view(batch_size, -1, ret_dict['rcnn_reg'].shape[1])  # (B, M, C)
@@ -254,31 +251,24 @@ class PointRCNNEnv():
                                               loc_y_scope=cfg.RCNN.LOC_Y_SCOPE, loc_y_bin_size=cfg.RCNN.LOC_Y_BIN_SIZE,
                                               get_ry_fine=True).view(batch_size, -1, 7)
 
-            # select boxes
-            pred_boxes3d_selected = pred_boxes3d[thresh_mask.view(batch_size, -1)]
-            raw_scores_selected = roi_scores_raw[thresh_mask.view(batch_size, -1)]
-            norm_scores_selected = norm_scores[thresh_mask.view(batch_size, -1)]
-
-            # print(pred_boxes3d_selected, '\n', norm_scores_selected)
-            # print('-----')
+            # select boxes (list of tensors)
+            pred_boxes3d_selected = [pred_boxes3d[k][thresh_mask[k].view(-1)] for k in range(batch_size)]
+            raw_scores_selected = [roi_scores_raw[k][thresh_mask[k].view(-1)] for k in range(batch_size)]
+            norm_scores_selected = [norm_scores[k][thresh_mask[k].view(-1)] for k in range(batch_size)]
 
             # rotated NMS
-            boxes_bev_selected = kitti_utils.boxes3d_to_bev_torch(pred_boxes3d_selected)
-            keep_idx = iou3d_utils.nms_gpu(boxes_bev_selected, raw_scores_selected, cfg.RCNN.NMS_THRESH).view(-1)
-            pred_boxes3d_selected = pred_boxes3d_selected[keep_idx]
-            scores_selected = raw_scores_selected[keep_idx]
-            norm_scores_selected = norm_scores_selected[keep_idx]
-            pred_boxes3d_selected, scores_selected = pred_boxes3d_selected, scores_selected
-
-            # print(pred_boxes3d_selected, '\n', norm_scores_selected)
+            boxes_bev_selected = [kitti_utils.boxes3d_to_bev_torch(bboxes) for bboxes in pred_boxes3d_selected]
+            keep_idx = [iou3d_utils.nms_gpu(boxes_bev_selected[k], raw_scores_selected[k], cfg.RCNN.NMS_THRESH).view(-1) for k in range(batch_size)]
+            pred_boxes3d_selected = [pred_boxes3d_selected[k][keep_idx[k]] for k in range(batch_size)]
+            scores_selected = [raw_scores_selected[k][keep_idx[k]] for k in range(batch_size)]
+            norm_scores_selected = [norm_scores_selected[k][keep_idx[k]] for k in range(batch_size)]
 
             # Intersect over union
-            iou3d = torch.cat([iou3d_utils.boxes_iou3d_gpu(pred_boxes3d[k], gt_boxes3d[k]) for k in range(batch_size)], dim=0)
-            gt_max_iou, _ = iou3d.max(dim=1)
+            iou3d = [iou3d_utils.boxes_iou3d_gpu(pred_boxes3d_selected[k], gt_boxes3d[k]) for k in range(batch_size)]
 
             # Recall is how many of the gt boxes were predicted
-            recalled_num = (gt_max_iou > 0.7).sum().item()
-            total_boxes = len(gt_boxes3d)
+            # recalled_num = (gt_max_iou > 0.7).sum().item()
+            # total_boxes = len(gt_boxes3d)
             
             """
             Annotations - how kitti eval interprets the information from kitti_common.py
