@@ -400,7 +400,13 @@ class KittiRCNNDataset(KittiDataset):
         angle_map = self.get_angle_map(sample_id)
 
         image = self.get_image(sample_id)
-        print(image.shape)
+
+        H, W, _ = image.shape
+        top_pad = (384 - H) // 2
+        bottom_pad = (384 - H) // 2 if H % 2 == 0 else (384 - H) // 2 + 1
+        right_pad = (1248 - W) // 2 
+        left_pad = (1248 - W) // 2  if W % 2 == 0 else (1248 - W) // 2 + 1
+        image = np.pad(image, ((top_pad, bottom_pad), (left_pad, right_pad), (0, 0)), "constant", constant_values=0)
 
         sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
                         'pts_rect': pts_rect, 'pts_intensity': pts_intensity,

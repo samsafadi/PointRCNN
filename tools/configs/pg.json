@@ -1,7 +1,7 @@
 
 {
   "seed": 20,
-  "batch_size": 64,
+  "batch_size": 4,
   "workers": 1,
   "policy": "pg",
   "test": false,

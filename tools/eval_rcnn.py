@@ -515,6 +515,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
 
             batch_size = len(sample_id)
             inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
+            print(inputs.shape)
             input_data = {'pts_input': inputs}
 
             # model inference

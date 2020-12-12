@@ -99,6 +99,7 @@ class PointRCNNEnv():
         # load config
         config_path = os.path.join(HOME_DIR, 'tools/configs/pg.json')
         self.config = load_config(config_path)
+        self.npoints = cfg.RPN.NUM_POINTS
 
         root_result_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG)
         ckpt_dir = os.path.join('../', 'output', 'rcnn', cfg.TAG, 'ckpt')
@@ -113,12 +114,15 @@ class PointRCNNEnv():
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(self.config, logger)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
-        self.model.cuda()
-        self.model.eval()
 
         self.use_masked = use_masked
         # load checkpoint
         load_ckpt_based_on_cfg(self.config, self.model, logger)
+
+        # If want parallel
+        # self.model = torch.nn.DataParallel(self.model)
+        self.model.cuda()
+        self.model.eval()
 
         self.data = None
 
@@ -177,8 +181,7 @@ class PointRCNNEnv():
     def _get_pts_from_mask(self, scanning_mask):
         """ mask pts from 2d angular map
         Input: 
-            :param mask: (B, H, W)
-            :param pts_intensity: (N, 1)
+            :param scanning_mask: (B, H, W)
         Return:
             :param pts: (B, N, 4)
         """
@@ -188,12 +191,20 @@ class PointRCNNEnv():
 
         # expand mask 2d->3d to enable broadcast
         mask = np.expand_dims(scanning_mask, axis=3)
-        masked_ang_depth_map = ang_depth_map * mask
+        masked_ang_depth_map = [ang_depth_map[k] * mask[k] for k in range(self.config['batch_size'])]
 
-        masked_pts = masked_ang_depth_map.reshape((self.config['batch_size'], -1, 4))
-        masked_pts = masked_pts[masked_pts[:, :, 0] > 0] # around ~(15000,4)
-        masked_pts = masked_pts.reshape((self.config['batch_size'], -1, 4))
+        # masked_pts = masked_ang_depth_map.reshape((self.config['batch_size'], -1, 4))
+        masked_pts_arr = [masked_pts[masked_pts[:, :, 0] > 0] for masked_pts in masked_ang_depth_map] # around ~(15000,4)
 
+        adjusted_masked_pts = []
+        for masked_pts in masked_pts_arr:
+            if masked_pts.shape[0] <= self.npoints:
+                padding = np.full((self.npoints - masked_pts.shape[0], 4), -1)
+                adjusted_masked_pts.append(np.concatenate((masked_pts, padding), axis=0))
+            else:
+                adjusted_masked_pts.append(masked_pts[:self.npoints, :])
+
+        masked_pts = np.array(adjusted_masked_pts)
         return masked_pts
     
     def render(self):
@@ -216,8 +227,8 @@ class PointRCNNEnv():
             calib = [self.test_loader.dataset.get_calib(idx) for idx in sample_id]
             if self.use_masked:
                 # use masked/sampled pts if True
-                pts_rect = np.array([c.lidar_to_rect(masked_pts[k, :, 0:3]) for k, c in enumerate(calib)])
-                pts_intensity = masked_pts[:, :, 3]
+                pts_rect = np.array([c.lidar_to_rect(masked_pts[k][:, 0:3]) for k, c in enumerate(calib)])
+                pts_intensity = [masked_pts[k][:, 3] for k in range(batch_size)]
                 npoints = masked_pts.shape[0]
 
             inputs = torch.from_numpy(pts_rect).cuda(non_blocking=True).float().view(self.config['batch_size'], -1, 3)
@@ -225,6 +236,7 @@ class PointRCNNEnv():
             input_data = {'pts_input': inputs}
 
             # model inference
+            print(inputs)
             ret_dict = self.model(input_data)
 
             roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
