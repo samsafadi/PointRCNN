@@ -289,7 +289,7 @@ class PointRCNNEnv():
                 return None
 
             # Intersect over union
-            iou3d = [iou3d_utils.boxes_iou3d_gpu(pred_boxes3d_selected[k], gt_boxes3d_selected[k]) for k in range(batch_size)]
+            iou3d = [iou3d_utils.boxes_iou3d_gpu(gt_boxes3d_selected[k], pred_boxes3d_selected[k]) for k in range(batch_size)]
 
             # get the max iou for each ground truth bounding box
             gt_max_iou = [torch.max(iou3d[k], dim=0)[0] for k in range(batch_size)]
