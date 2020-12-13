@@ -113,6 +113,7 @@ class PointRCNNEnv():
 
         # create PointRCNN dataloader & network
         self.test_loader = create_dataloader(self.config, logger)
+        self.test_iter = iter(self.test_loader)
         self.model = PointRCNN(num_classes=self.test_loader.dataset.num_class, use_xyz=True, mode='TEST')
 
         self.use_masked = use_masked
@@ -147,7 +148,7 @@ class PointRCNNEnv():
         """
 
         # load the data sample at the reset step
-        self.data = next(iter(self.test_loader))
+        self.data = next(self.test_iter)
         RGB_Image = self.data['image']
         
         return RGB_Image
@@ -220,10 +221,11 @@ class PointRCNNEnv():
             batch_size = self.config['batch_size']
 
             # get valid point (projected points should be in image)
-            sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints = \
-            self.data['sample_id'], self.data['pts_rect'], self.data['pts_intensity'], self.data['gt_boxes3d'], self.data['npoints']
+            sample_id, pts_rect, pts_intensity, gt_boxes3d, npoints, labels = \
+            self.data['sample_id'], self.data['pts_rect'], self.data['pts_intensity'], self.data['gt_boxes3d'], self.data['npoints'], self.data['label']
 
-            # TODO try to access this with calib function
+            cls_types = [[labels[k][i].cls_type for i in range(len(labels[k]))] for k in range(batch_size)]
+
             calib = [self.test_loader.dataset.get_calib(idx) for idx in sample_id]
             if self.use_masked:
                 # use masked/sampled pts if True
@@ -236,7 +238,6 @@ class PointRCNNEnv():
             input_data = {'pts_input': inputs}
 
             # model inference
-            print(inputs)
             ret_dict = self.model(input_data)
 
             roi_scores_raw = ret_dict['roi_scores_raw']  # (B, M)
@@ -275,147 +276,46 @@ class PointRCNNEnv():
             scores_selected = [raw_scores_selected[k][keep_idx[k]] for k in range(batch_size)]
             norm_scores_selected = [norm_scores_selected[k][keep_idx[k]] for k in range(batch_size)]
 
+            # want car gt_boxes
+            keep_idx = [[i for i in range(len(cls_types[k])) if cls_types[k][i] == 'Car'] for k in range(batch_size)]
+            gt_boxes3d_selected = [gt_boxes3d[k][keep_idx[k]] for k in range(batch_size)]
+
+            # what if no boxes with cars?
+            has_info = [k for k in range(batch_size) if len(keep_idx[k]) > 0]
+            gt_boxes3d_selected = [gt_boxes3d_selected[x] for x in has_info]
+            pred_boxes3d_selected = [pred_boxes3d_selected[x] for x in has_info]
+            batch_size = len(has_info)
+            if batch_size == 0:
+                return None
+
             # Intersect over union
-            iou3d = [iou3d_utils.boxes_iou3d_gpu(pred_boxes3d_selected[k], gt_boxes3d[k]) for k in range(batch_size)]
+            iou3d = [iou3d_utils.boxes_iou3d_gpu(pred_boxes3d_selected[k], gt_boxes3d_selected[k]) for k in range(batch_size)]
 
-            # Recall is how many of the gt boxes were predicted
-            # recalled_num = (gt_max_iou > 0.7).sum().item()
-            # total_boxes = len(gt_boxes3d)
-            
-            """
-            Annotations - how kitti eval interprets the information from kitti_common.py
-            annotations.update({                                                                                                                                                                                                                                                                                                                
-                'name': [],
-                'truncated': [],
-                'occluded': [],
-                'alpha': [],
-                'bbox': [],
-                'dimensions': [],
-                'location': [],
-                'rotation_y': []
-            })
+            # get the max iou for each ground truth bounding box
+            gt_max_iou = [torch.max(iou3d[k], dim=0)[0] for k in range(batch_size)]
 
-            How it saves to the file in eval_rcnn.py
-            print('%s -1 -1 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f' %
-                  (cfg.CLASSES, alpha, img_boxes[k, 0], img_boxes[k, 1], img_boxes[k, 2], img_boxes[k, 3],
-                   bbox3d[k, 3], bbox3d[k, 4], bbox3d[k, 5], bbox3d[k, 0], bbox3d[k, 1], bbox3d[k, 2],
-                   bbox3d[k, 6], scores[k]), file=f)
-
-            How it reads from it into annotations
-            annotations['name'] = np.array([x[0] for x in content])
-            annotations['truncated'] = np.array([float(x[1]) for x in content])
-            annotations['occluded'] = np.array([int(x[2]) for x in content])
-            annotations['alpha'] = np.array([float(x[3]) for x in content])
-            annotations['bbox'] = np.array(
-                [[float(info) for info in x[4:8]] for x in content]).reshape(-1, 4)
-            # dimensions will convert hwl format to standard lhw(camera) format.
-            annotations['dimensions'] = np.array(
-                [[float(info) for info in x[8:11]] for x in content]).reshape(
-                    -1, 3)[:, [2, 0, 1]]
-            annotations['location'] = np.array(
-                [[float(info) for info in x[11:14]] for x in content]).reshape(-1, 3)
-            annotations['rotation_y'] = np.array(
-                [float(x[14]) for x in content]).reshape(-1)
-            if len(content) != 0 and len(content[0]) == 16:  # have score
-                annotations['score'] = np.array([float(x[15]) for x in content])
-            else:
-                annotations['score'] = np.zeros([len(annotations['bbox'])])
-
-            NOTE: TO GET ALPHA
-            x, z, ry = bbox3d[k, 0], bbox3d[k, 2], bbox3d[k, 6]
-            beta = np.arctan2(z, x)
-            alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-
-            OCCLUDED AND TRUNCATED SEEM TO ALWAYS BE -1
-
-            NOTE: TO GET IMAGE BOXES
-            corners3d = kitti_utils.boxes3d_to_corners3d(bbox3d)
-            img_boxes, _ = calib.corners3d_to_img_boxes(corners3d)
-            """
-
-            # convert to np
-            # pred_boxes3d_np = np.squeeze(pred_boxes3d.cpu().numpy(), axis=0)
-            # gt_boxes3d_np = np.squeeze(gt_boxes3d.cpu().numpy(), axis=0)
-
-            pred_annos = []
+            # get precision at each index (to get auc)
+            precision_vals = []
             for k in range(batch_size):
-                anno = {}
-                anno.update({
-                    'name': [],
-                    'truncated': [],
-                    'occluded': [],
-                    'alpha': [],
-                    'bbox': [],
-                    'dimensions': [],
-                    'location': [],
-                    'rotation_y': []
-                })
+                batch_iou = gt_max_iou[k]
+                batch_precision = []
+                num_correct = 0
+                for i in range(len(batch_iou)):
+                    if batch_iou[i] > 0.7:
+                        num_correct += 1
+                    batch_precision.append(num_correct / (i+1))
 
-                pred_boxes3d_np = pred_boxes3d_selected[k].cpu().numpy()
-                gt_boxes3d_np = gt_boxes3d[k].cpu().numpy()
-                calib_cur = calib[k]
+                precision_vals.append(batch_precision)
+            
+            aps = []
+            for k in range(batch_size):
+                batch_prec = precision_vals[k]
+                ap = 0
+                for i in range(len(batch_prec)):
+                    ap += max(batch_prec[i:])
 
-                print(pred_boxes3d_np.shape, gt_boxes3d_np.shape)
-
-                anno['name'] = np.array([cfg.CLASSES for _ in range(len(pred_boxes3d_np))])
-                anno['truncated'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
-                anno['occluded'] = np.array([-1 for _ in range(len(pred_boxes3d_np))])
-
-                # Get image boxes
-                corners3d = kitti_utils.boxes3d_to_corners3d(pred_boxes3d_np)
-                img_boxes, _ = calib_cur.corners3d_to_img_boxes(corners3d)
-                anno['bbox'] = img_boxes
-
-                x, z, ry = pred_boxes3d_np[:, 0], pred_boxes3d_np[:, 2], pred_boxes3d_np[:, 6]
-                beta = np.arctan2(z, x)
-                alpha = -np.sign(beta) * np.pi / 2 + beta + ry
-                
-                anno['alpha'] = alpha
-                # reorder to convert hwl format to standard lhw(camera) format.
-                anno['dimensions'] = pred_boxes3d_np[:, 3:6][:, [2, 0, 1]]
-                anno['location'] = pred_boxes3d_np[:, 0:3]
-                anno['rotation_y'] = pred_boxes3d_np[:, 6]
-                anno['score'] = scores_selected[k].cpu().numpy()
-
-                pred_annos.append(anno)
-        
-            # print(pred_annos)
-            label_annos = [kitti.get_label_anno(os.path.join(self.label_root, '%06d.txt' % idx)) for idx in sample_id]
-            # print(label_annos)
-
-            # 0 means car
-            current_classes = [0]
-
-            overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
-                                     0.5], [0.7, 0.5, 0.5, 0.7, 0.5],
-                                    [0.7, 0.5, 0.5, 0.7, 0.5]])
-            overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
-                                     0.5], [0.5, 0.25, 0.25, 0.5, 0.25],
-                                    [0.5, 0.25, 0.25, 0.5, 0.25]])
-            min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
-            class_to_name = {
-                0: 'Car',
-                1: 'Pedestrian',
-                2: 'Cyclist',
-                3: 'Van',
-                4: 'Person_sitting',
-            }
-            name_to_class = {v: n for n, v in class_to_name.items()}
-            if not isinstance(current_classes, (list, tuple)):
-                current_classes = [current_classes]
-            current_classes_int = []
-            for curcls in current_classes:
-                if isinstance(curcls, str):
-                    current_classes_int.append(name_to_class[curcls])
-                else:
-                    current_classes_int.append(curcls)
-            current_classes = current_classes_int
-            min_overlaps = min_overlaps[:, :, current_classes]
-
-            # return get_official_eval_result(label_annos, pred_annos, cfg.CLASSES)
-            # print(label_annos)
-            # print(pred_annos)
-            difficultys = [1]
-            ret = eval_class(label_annos, pred_annos, current_classes, difficultys, 0, min_overlaps, num_parts=1)
-            print(get_mAP(ret['precision']))
-            return get_mAP(ret['precision'])
+                aps.append(ap)
+            
+            num_gt_boxes = sum([len(gt_max_iou[k]) for k in range(batch_size)])
+            
+            return sum(aps) / num_gt_boxes

@@ -401,6 +401,8 @@ class KittiRCNNDataset(KittiDataset):
 
         image = self.get_image(sample_id)
 
+        label = self.get_label(sample_id)
+
         H, W, _ = image.shape
         top_pad = (384 - H) // 2
         bottom_pad = (384 - H) // 2 if H % 2 == 0 else (384 - H) // 2 + 1
@@ -411,7 +413,7 @@ class KittiRCNNDataset(KittiDataset):
         sample_info = {'sample_id': sample_id, 'random_select': self.random_select,
                         'pts_rect': pts_rect, 'pts_intensity': pts_intensity,
                         'gt_boxes3d': all_gt_boxes3d, 'npoints': self.npoints, 'image': image,
-                        'angle_map': angle_map}
+                        'angle_map': angle_map, 'label': label}
         return sample_info
 
     @staticmethod
